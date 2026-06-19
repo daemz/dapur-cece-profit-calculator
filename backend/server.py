@@ -61,12 +61,12 @@ def create_refresh_token(user_id: str) -> str:
 
 def set_auth_cookies(response: Response, access: str, refresh: str):
     response.set_cookie(
-        key="access_token", value=access, httponly=True, secure=False,
-        samesite="lax", max_age=12 * 3600, path="/",
+        key="access_token", value=access, httponly=True, secure=True,
+        samesite="none", max_age=12 * 3600, path="/",
     )
     response.set_cookie(
-        key="refresh_token", value=refresh, httponly=True, secure=False,
-        samesite="lax", max_age=7 * 24 * 3600, path="/",
+        key="refresh_token", value=refresh, httponly=True, secure=True,
+        samesite="none", max_age=7 * 24 * 3600, path="/",
     )
 
 
@@ -190,7 +190,10 @@ async def register(payload: RegisterIn, response: Response):
     access = create_access_token(user_id, email)
     refresh = create_refresh_token(user_id)
     set_auth_cookies(response, access, refresh)
-    return {"id": user_id, "email": email, "name": payload.name, "role": "user"}
+    return {
+        "id": user_id, "email": email, "name": payload.name, "role": "user",
+        "access_token": access, "refresh_token": refresh,
+    }
 
 
 @api.post("/auth/login")
@@ -205,6 +208,7 @@ async def login(payload: LoginIn, response: Response):
     return {
         "id": user["id"], "email": user["email"],
         "name": user.get("name", ""), "role": user.get("role", "user"),
+        "access_token": access, "refresh_token": refresh,
     }
 
 
@@ -218,6 +222,28 @@ async def logout(response: Response, user=Depends(get_current_user)):
 @api.get("/auth/me")
 async def me(user=Depends(get_current_user)):
     return user
+
+
+@api.post("/auth/refresh")
+async def refresh_token(request: Request, response: Response):
+    token = request.cookies.get("refresh_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="No refresh token")
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGO])
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="Invalid token type")
+        user = await db.users.find_one({"id": payload["sub"]})
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        access = create_access_token(user["id"], user["email"])
+        new_refresh = create_refresh_token(user["id"])
+        set_auth_cookies(response, access, new_refresh)
+        return {"ok": True}
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Refresh token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
 
 
 # ------------- Mitra -------------

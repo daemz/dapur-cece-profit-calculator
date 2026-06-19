@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { api, formatApiErrorDetail } from "@/lib/api";
+import { api, formatApiErrorDetail, setStoredToken } from "@/lib/api";
 
 const AuthCtx = createContext(null);
 
@@ -22,7 +22,8 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     try {
       const { data } = await api.post("/auth/login", { email, password });
-      setUser(data);
+      if (data.access_token) setStoredToken(data.access_token);
+      setUser({ id: data.id, email: data.email, name: data.name, role: data.role });
       return { ok: true };
     } catch (e) {
       return {
@@ -35,7 +36,8 @@ export function AuthProvider({ children }) {
   const register = async (name, email, password) => {
     try {
       const { data } = await api.post("/auth/register", { name, email, password });
-      setUser(data);
+      if (data.access_token) setStoredToken(data.access_token);
+      setUser({ id: data.id, email: data.email, name: data.name, role: data.role });
       return { ok: true };
     } catch (e) {
       return {
@@ -51,6 +53,7 @@ export function AuthProvider({ children }) {
     } catch (_e) {
       // ignore logout errors
     }
+    setStoredToken(null);
     setUser(false);
   };
 
