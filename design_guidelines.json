@@ -1,0 +1,114 @@
+{
+  "project_name": "UMKM Penitipan Sarapan Pagi Dashboard",
+  "domain": "SaaS / UMKM Dashboard",
+  "theme": "LIGHT",
+  "archetype": "4 (Swiss & High-Contrast)",
+  "visual_mood": "Professional, reliable, energetic, and clean.",
+  "design_philosophy": "Functional-first dashboard with neutral surfaces and high-impact red accents for primary actions and data highlights.",
+  "colors": {
+    "primary": {
+      "DEFAULT": "#DC2626",
+      "hover": "#B91C1C",
+      "foreground": "#FFFFFF"
+    },
+    "background": "#F8FAFC",
+    "surface": "#FFFFFF",
+    "text": {
+      "main": "#0F172A",
+      "muted": "#64748B",
+      "inverse": "#FFFFFF"
+    },
+    "border": "#E2E8F0",
+    "semantic": {
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "danger": "#EF4444",
+      "info": "#3B82F6"
+    }
+  },
+  "typography": {
+    "font_family": {
+      "heading": "Outfit, sans-serif",
+      "body": "Figtree, sans-serif"
+    },
+    "hierarchy": {
+      "h1": "text-4xl md:text-5xl font-bold tracking-tight text-slate-900",
+      "h2": "text-2xl md:text-3xl font-semibold tracking-tight text-slate-900",
+      "h3": "text-xl font-medium tracking-tight text-slate-800",
+      "h4": "text-lg font-medium text-slate-800",
+      "body": "text-base text-slate-600 leading-relaxed",
+      "small": "text-sm text-slate-500",
+      "overline": "text-xs font-bold uppercase tracking-[0.2em] text-slate-500"
+    }
+  },
+  "spacing_and_layout": {
+    "general": "Generous spacing. Use p-6 or p-8 for cards and containers to provide breathing room.",
+    "dashboard_grid": "Grid layout. grid-cols-1 md:grid-cols-3 lg:grid-cols-4 with gap-6.",
+    "card_style": "Flat solid surfaces with 1px subtle border (border-slate-200), rounded-xl, no heavy shadows. Use shadow-sm on hover.",
+    "alignment": "Left-align dense content and tables. Center-align empty states."
+  },
+  "components_strategy": {
+    "buttons": "Shadcn buttons. Primary buttons use bg-red-600 hover:bg-red-700 text-white. Use subtle rounded corners (rounded-md).",
+    "inputs": "Shadcn inputs and forms. Clean, 1px border. Focus ring should be ring-red-500/20 with border-red-500.",
+    "cards": "Shadcn Card for Mitra boxes and summary widgets.",
+    "tables": "Shadcn Table for transaction lists. Alternating row colors or simple clean borders.",
+    "charts": "Recharts. Use LineChart or BarChart for sales. Use red (#DC2626) as the primary chart color, paired with neutral grays for secondary datasets.",
+    "icons": "lucide-react"
+  },
+  "currency_format": {
+    "locale": "id-ID",
+    "currency": "IDR",
+    "prefix": "Rp",
+    "example": "Rp 15.000"
+  },
+  "core_features_ui_spec": {
+    "login_page": {
+      "layout": "Two-column split screen on desktop. Left side: Login form (email + password). Right side: Immersive background image covering the full height.",
+      "background_image": "https://images.pexels.com/photos/37614617/pexels-photo-37614617.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+    },
+    "dashboard": {
+      "layout": "Sidebar navigation + Top Header + Main Content Area.",
+      "header": "Sticky header with page title, current date, and user profile.",
+      "metrics_row": "Top row showing total sales today, total profit, and total items sold.",
+      "mitra_cards_section": "Grid of cards. Each card represents one 'Mitra' (Partner). Includes Title (Mitra Name), list of products sold today, and totals.",
+      "sales_chart": "Interactive chart with tabs for 'Harian' (Daily), 'Mingguan' (Weekly), 'Bulanan' (Monthly).",
+      "actions": "Prominent 'Export PDF' and 'Cetak Struk' (Print Receipt) buttons near the relevant tables/charts."
+    },
+    "new_item_form": {
+      "fields": ["Mitra", "Menu Sarapan", "Jumlah", "Harga Dari Mitra", "Harga Jual"],
+      "layout": "Use a Modal (Dialog) or a dedicated slide-out Panel (Sheet) for adding new items to keep the dashboard context."
+    },
+    "daily_sales_input": {
+      "layout": "Inline editable table or a dedicated form layout to quickly input 'Jumlah Terjual' (Amount Sold) per product."
+    }
+  },
+  "media_assets": {
+    "images": [
+      {
+        "category": "login_background",
+        "url": "https://images.pexels.com/photos/37614617/pexels-photo-37614617.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Traditional Indonesian breakfast Nasi Uduk/Ayam Penyet, used for the right-side panel of the login page."
+      },
+      {
+        "category": "placeholder_food",
+        "url": "https://images.pexels.com/photos/8498870/pexels-photo-8498870.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Nasi Campur for empty states or generic food banners."
+      },
+      {
+        "category": "brand_logo",
+        "url": "https://images.unsplash.com/photo-1769101124421-a9feb1e374e5?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzV8MHwxfHNlYXJjaHwxfHxmb29kJTIwc3RhcnR1cCUyMGxvZ28lMjByZWQlMjBtaW5pbWFsaXN0fGVufDB8fHx8MTc4MTg1MTQ0Nnww&ixlib=rb-4.1.0&q=85",
+        "description": "Minimalist red logo to be used in the top-left of the sidebar/header."
+      }
+    ]
+  },
+  "technical_instructions_for_main_agent": [
+    "Use .js/.jsx extensions for React components. Do NOT use .tsx.",
+    "All interactive elements MUST include data-testid attributes (e.g., data-testid='login-submit-button').",
+    "Initialize Tailwind config with the specified colors and fonts.",
+    "Use Lucide-React for all icons.",
+    "For the Mitra Cards, ensure there's enough padding (p-6) and display a clean list of products inside the card.",
+    "Calculate profit dynamically: (Harga Jual - Harga Dari Mitra) * Jumlah Terjual.",
+    "Implement the Export PDF and Print Receipt functionalities using window.print() or specialized JS libraries as appropriate (e.g., react-to-print or jsPDF).",
+    "Ensure the UI correctly formats Indonesian Rupiah (Rp X.XXX)."
+  ]
+}
