@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { Plus, Trash2, Pencil, Package } from "lucide-react";
 import { toast } from "sonner";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 const initialForm = {
   mitra_id: "",
@@ -30,6 +31,7 @@ export default function ProductsPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(initialForm);
+  const [toDelete, setToDelete] = useState(null);
 
   const load = async () => {
     try {
@@ -89,7 +91,6 @@ export default function ProductsPage() {
   };
 
   const onDelete = async (id) => {
-    if (!window.confirm("Hapus produk ini? Transaksi terkait juga akan dihapus.")) return;
     try {
       await api.delete(`/products/${id}`);
       toast.success("Produk dihapus");
@@ -169,7 +170,7 @@ export default function ProductsPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => onDelete(p.id)}
+                          onClick={() => setToDelete(p)}
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
                           data-testid={`delete-product-${p.id}`}
                           title="Hapus"
@@ -286,6 +287,22 @@ export default function ProductsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!toDelete}
+        onOpenChange={(o) => !o && setToDelete(null)}
+        title="Hapus Produk"
+        description={
+          toDelete
+            ? `Anda yakin ingin menghapus "${toDelete.menu}" dari ${toDelete.mitra_name}? Transaksi terkait juga akan dihapus.`
+            : ""
+        }
+        onConfirm={async () => {
+          if (toDelete) await onDelete(toDelete.id);
+          setToDelete(null);
+        }}
+        testId="confirm-delete-product"
+      />
     </div>
   );
 }

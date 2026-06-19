@@ -12,12 +12,14 @@ import {
 } from "@/components/ui/table";
 import { Plus, Trash2, Pencil, Store } from "lucide-react";
 import { toast } from "sonner";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 export default function MitraPage() {
   const [mitras, setMitras] = useState([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null); // null = create, object = edit
   const [name, setName] = useState("");
+  const [toDelete, setToDelete] = useState(null);
 
   const load = async () => {
     try {
@@ -64,12 +66,11 @@ export default function MitraPage() {
   };
 
   const onDelete = async (id) => {
-    if (!window.confirm("Hapus mitra ini? Produk & transaksi terkait juga akan dihapus.")) return;
     try {
       await api.delete(`/mitra/${id}`);
       toast.success("Mitra dihapus");
       load();
-    } catch (e) {
+    } catch (_e) {
       toast.error("Gagal menghapus mitra");
     }
   };
@@ -126,7 +127,7 @@ export default function MitraPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => onDelete(m.id)}
+                          onClick={() => setToDelete(m)}
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
                           data-testid={`delete-mitra-${m.id}`}
                           title="Hapus"
@@ -176,6 +177,22 @@ export default function MitraPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!toDelete}
+        onOpenChange={(o) => !o && setToDelete(null)}
+        title="Hapus Mitra"
+        description={
+          toDelete
+            ? `Anda yakin ingin menghapus mitra "${toDelete.name}"? Semua produk & transaksi terkait juga akan dihapus.`
+            : ""
+        }
+        onConfirm={async () => {
+          if (toDelete) await onDelete(toDelete.id);
+          setToDelete(null);
+        }}
+        testId="confirm-delete-mitra"
+      />
     </div>
   );
 }

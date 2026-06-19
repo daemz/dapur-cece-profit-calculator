@@ -16,6 +16,7 @@ import {
 import { Plus, Trash2, Printer, Eye, Receipt as ReceiptIcon } from "lucide-react";
 import { toast } from "sonner";
 import Receipt from "@/components/Receipt";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState([]);
@@ -25,6 +26,7 @@ export default function TransactionsPage() {
   const [filterDate, setFilterDate] = useState(todayStr());
   const [form, setForm] = useState({ product_id: "", jumlah_terjual: "", date: todayStr() });
   const [printData, setPrintData] = useState(null);
+  const [toDelete, setToDelete] = useState(null);
 
   const load = async () => {
     try {
@@ -60,10 +62,13 @@ export default function TransactionsPage() {
   };
 
   const onDelete = async (id) => {
-    if (!window.confirm("Hapus transaksi ini?")) return;
-    await api.delete(`/transactions/${id}`);
-    toast.success("Transaksi dihapus");
-    load();
+    try {
+      await api.delete(`/transactions/${id}`);
+      toast.success("Transaksi dihapus");
+      load();
+    } catch {
+      toast.error("Gagal menghapus transaksi");
+    }
   };
 
   const printOne = (tx) => {
@@ -176,7 +181,7 @@ export default function TransactionsPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => onDelete(t.id)}
+                          onClick={() => setToDelete(t)}
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
                           data-testid={`delete-tx-${t.id}`}
                           title="Hapus"
@@ -305,6 +310,22 @@ export default function TransactionsPage() {
           <Receipt {...printData} />
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!toDelete}
+        onOpenChange={(o) => !o && setToDelete(null)}
+        title="Hapus Transaksi"
+        description={
+          toDelete
+            ? `Hapus transaksi ${toDelete.menu} (${toDelete.mitra_name}) tanggal ${toDelete.date}?`
+            : ""
+        }
+        onConfirm={async () => {
+          if (toDelete) await onDelete(toDelete.id);
+          setToDelete(null);
+        }}
+        testId="confirm-delete-tx"
+      />
     </div>
   );
 }
