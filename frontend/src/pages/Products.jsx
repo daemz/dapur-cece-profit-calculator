@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -93,6 +93,9 @@ export default function ProductsPage() {
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle className="font-heading">Tambah Produk Sarapan</DialogTitle>
+                <DialogDescription>
+                  Isi detail produk: mitra, menu, jumlah titipan, harga dari mitra, dan harga jual.
+                </DialogDescription>
               </DialogHeader>
               <form onSubmit={onSubmit} className="space-y-4">
                 <div>

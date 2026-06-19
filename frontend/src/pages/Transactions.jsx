@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -124,6 +124,9 @@ export default function TransactionsPage() {
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle className="font-heading">Input Total Terjual</DialogTitle>
+                  <DialogDescription>
+                    Pilih produk dan masukkan jumlah yang terjual pada tanggal tertentu.
+                  </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={onSubmit} className="space-y-4">
                   <div>

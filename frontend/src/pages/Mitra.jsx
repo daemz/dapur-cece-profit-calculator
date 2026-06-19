@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -68,6 +68,7 @@ export default function MitraPage() {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle className="font-heading">Tambah Mitra Baru</DialogTitle>
+                <DialogDescription>Masukkan nama mitra/penitip sarapan baru.</DialogDescription>
               </DialogHeader>
               <form onSubmit={onCreate} className="space-y-4">
                 <div>
