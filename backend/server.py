@@ -263,6 +263,21 @@ async def list_mitra(user=Depends(get_current_user)):
     return items
 
 
+@api.put("/mitra/{mitra_id}", response_model=Mitra)
+async def update_mitra(mitra_id: str, payload: MitraIn, user=Depends(get_current_user)):
+    existing = await db.mitra.find_one({"id": mitra_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Mitra tidak ditemukan")
+    dup = await db.mitra.find_one({"name": payload.name, "id": {"$ne": mitra_id}})
+    if dup:
+        raise HTTPException(status_code=400, detail="Nama mitra sudah dipakai")
+    await db.mitra.update_one({"id": mitra_id}, {"$set": {"name": payload.name}})
+    await db.products.update_many({"mitra_id": mitra_id}, {"$set": {"mitra_name": payload.name}})
+    await db.transactions.update_many({"mitra_id": mitra_id}, {"$set": {"mitra_name": payload.name}})
+    updated = await db.mitra.find_one({"id": mitra_id}, {"_id": 0})
+    return Mitra(**updated)
+
+
 @api.delete("/mitra/{mitra_id}")
 async def delete_mitra(mitra_id: str, user=Depends(get_current_user)):
     await db.mitra.delete_one({"id": mitra_id})
@@ -392,17 +407,22 @@ async def dashboard_today(user=Depends(get_current_user)):
         items = []
         m_sales = 0.0
         m_profit = 0.0
+        m_setoran = 0.0
         m_count = 0
         for t in m_txs:
+            setoran = t["harga_mitra"] * t["jumlah_terjual"]
             items.append({
                 "menu": t["menu"],
                 "jumlah_terjual": t["jumlah_terjual"],
+                "harga_mitra": t["harga_mitra"],
                 "harga_jual": t["harga_jual"],
+                "setoran_mitra": setoran,
                 "total_pendapatan": t["total_pendapatan"],
                 "profit": t["profit"],
             })
             m_sales += t["total_pendapatan"]
             m_profit += t["profit"]
+            m_setoran += setoran
             m_count += t["jumlah_terjual"]
         cards.append({
             "mitra_id": m["id"],
@@ -410,6 +430,7 @@ async def dashboard_today(user=Depends(get_current_user)):
             "items": items,
             "total_sales": m_sales,
             "total_profit": m_profit,
+            "total_setoran": m_setoran,
             "total_items": m_count,
         })
 

@@ -72,19 +72,25 @@ h1, h2, h3, h4, h5, h6,
 }
 
 /* Print styles for receipt */
+#print-area {
+    position: absolute;
+    left: -9999px;
+    top: -9999px;
+    visibility: hidden;
+}
 @media print {
     body * {
         visibility: hidden;
-    }
-    #print-area,
-    #print-area * {
-        visibility: visible;
     }
     #print-area {
         position: absolute;
         left: 0;
         top: 0;
         width: 100%;
+        visibility: visible;
+    }
+    #print-area * {
+        visibility: visible;
     }
     .no-print {
         display: none !important;

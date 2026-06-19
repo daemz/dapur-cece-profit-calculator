@@ -1,0 +1,52 @@
+{
+  "summary": "Iteration-2 testing of UMKM Sarapan covering PUT /api/mitra cascade, dashboard setoran fields, Bearer-token iframe fallback, plus frontend Edit-Mitra / Edit-Product / Transaction-Detail-modal flows. Backend: 26/26 pytest passing (4 new tests for PUT /api/mitra cascade+duplicate+404, Bearer-only auth without cookies, and setoran_mitra/total_setoran in /api/dashboard/today). Frontend: Verified end-to-end on live preview URL — login persists access_token to localStorage (key 'sarapan_access_token'), Bearer fetch to /api/auth/me succeeds after clearing cookies (iframe fix confirmed), Mitra Edit dialog opens with prefilled name and 'Edit Mitra' title and persists changes, Product Edit dialog prefills (mitra/menu/jumlah/harga_mitra/harga_jual) and persists, Transaction Detail modal renders Tanggal/Mitra/Menu/Jumlah/Harga Dari Mitra/Harga Jual/Profit per Item/Setoran ke Mitra/Total Pendapatan/Total Profit/Dicatat pada with formatted Rupiah, Cetak Struk and Tutup buttons present. Dashboard Mitra Card now displays 'qty × harga_mitra' unit (e.g. '4 × Rp 10.000'), 'SETORAN MITRA Rp 40.000' as primary card total, then 'Pendapatan warung' and 'Profit warung' below — matches spec. #print-area positioned off-screen (left:-9999px) in normal viewport.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Dashboard (Recharts ResponsiveContainer)",
+        "issue": "Pre-existing from iteration_1: occasional blank dashboard / CRA dev-error overlay due to 'ResizeObserver loop completed with undelivered notifications' warning emitted by Recharts before container measures. Not a new regression. Still recommend a global window error-suppression for 'ResizeObserver loop' message in index.js or fixed-height wrapper around <ResponsiveContainer>.",
+        "selector": "[data-testid=\"sales-chart-card\"] ResponsiveContainer",
+        "priority": "MEDIUM"
+      },
+      {
+        "component": "Detail Modal labels",
+        "issue": "Labels are 'Harga Dari Mitra' and 'Setoran ke Mitra' (test request asked literally for 'Harga Mitra' and 'Setoran Mitra'). Semantically equivalent and arguably clearer Indonesian; flag only for product-language consistency with dashboard card label which uses 'SETORAN MITRA'.",
+        "selector": "[data-testid=\"tx-detail-modal\"]",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard Mitra Card", "issues": ["New layout looks clean: red qty pill, line items with 'qty × Rp harga_mitra' and per-line profit, then bold SETORAN MITRA row, then Pendapatan warung & Profit warung. Good visual hierarchy."]},
+      {"screen": "Detail Modal", "issues": ["Rupiah formatting, profit shown in green, clean two-column layout. Acceptable."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_umkm_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(carry-over from iteration_1) Suppress benign ResizeObserver warning in index.js to stop CRA dev-overlay engaging and blanking the dashboard on slow loads: window.addEventListener('error', e => { if (e.message && e.message.includes('ResizeObserver loop')) { e.stopImmediatePropagation(); e.preventDefault(); } });",
+    "OPTIONAL: Rename detail modal labels from 'Harga Dari Mitra' → 'Harga Mitra' and 'Setoran ke Mitra' → 'Setoran Mitra' to exactly match dashboard card terminology (only if product-team prefers strict consistency).",
+    "OPTIONAL: PUT /api/products does NOT cascade mitra_name change to historical transactions (already noted in iteration_1). PUT /api/mitra DOES cascade — verified."
+  ],
+  "critical_code_review_comments": [
+    "server.py: PUT /api/mitra correctly cascades name to db.products and db.transactions; duplicate-name returns 400; missing id returns 404. Solid.",
+    "dashboard_today now returns total_setoran (per card) and setoran_mitra (per item) with math harga_mitra*jumlah_terjual; values verified in pytest and on UI.",
+    "Auth: access_token + refresh_token returned in body AND set as httpOnly cookies with SameSite=None+Secure — required for iframe. Bearer header fallback verified on backend; frontend stores token under 'sarapan_access_token' and api.js attaches Authorization header via interceptor. Iframe scenario will work.",
+    "CORS_ORIGINS with default '*' and allow_credentials=True is still spec-invalid; preview works because cookies use SameSite=None+Secure. Set explicit origins for prod.",
+    "Frontend api.js interceptor handles 401 by clearing token — appropriate. Mitra/Products use shared Dialog for create+edit distinguished by 'editing' state, title swap to 'Edit Mitra'/'Edit Produk' confirmed working.",
+    "Pre-existing Radix Dialog a11y warning (missing DialogDescription) still present on edit dialogs — low priority."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_umkm_api.py (extended: TestAuth.test_bearer_token_works_without_cookies; TestMitra.test_update_mitra_cascades_name_to_products_and_transactions, test_update_mitra_duplicate_name_400, test_update_mitra_not_found_404; TestDashboard.test_today_returns_metrics_and_cards now asserts total_setoran and setoran_mitra)"
+  ],
+  "success_rate": { "backend": "100% (26/26)", "frontend": "95% — all new features (Bearer fallback, Mitra Edit, Product Edit, Detail modal, new dashboard card layout, print-area hidden) verified end-to-end; only carryover blanking issue from Recharts overlay" },
+  "test_credentials": "admin@sarapan.id / admin123 (seeded)",
+  "seed_data_creation": "Tests create TEST_/UI_ prefixed Mitra+Product+Transaction; cleaned up via API after run (admin cookie session DELETE). No leftover UI_/TEST_ mitra remain — verified.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: pytest /app/backend/tests/test_umkm_api.py -v (26 tests). All review-request items confirmed: PUT /api/mitra cascade, PUT /api/mitra 400 dup, dashboard total_setoran+setoran_mitra, Bearer-only auth, login body returns tokens. Frontend: localStorage key is 'sarapan_access_token' (NOT 'access_token'). Detail modal uses labels 'Harga Dari Mitra' / 'Setoran ke Mitra'. Recharts overlay still a flaky source of dashboard blank — workaround: hard refresh.",
+  "rca of the issue": "No new bugs found. Iframe auth bug (previous) is now mitigated by (1) backend returning access_token in login response body and (2) frontend api.js attaching Authorization: Bearer header from localStorage; verified by clearing cookies in browser and successfully calling /api/auth/me with 200. Carry-over Recharts ResizeObserver overlay is the only flaky UX item — root cause and mitigation already documented in iteration_1."
+}

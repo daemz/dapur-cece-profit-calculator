@@ -284,22 +284,29 @@ function MitraCard({ data }) {
                 <div>
                   <div className="text-sm font-medium text-slate-800">{it.menu}</div>
                   <div className="text-xs text-slate-500 mt-0.5">
-                    {it.jumlah_terjual} × {formatRupiah(it.harga_jual)}
+                    {it.jumlah_terjual} × {formatRupiah(it.harga_mitra)}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-sm font-semibold text-slate-900">{formatRupiah(it.total_pendapatan)}</div>
+                  <div className="text-sm font-semibold text-slate-900">{formatRupiah(it.setoran_mitra)}</div>
                   <div className="text-xs text-emerald-600 mt-0.5">+{formatRupiah(it.profit)}</div>
                 </div>
               </li>
             ))}
           </ul>
         )}
-        <div className="pt-3 mt-2 border-t border-slate-100 flex items-center justify-between">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Total Mitra</span>
-          <div className="text-right">
-            <div className="font-heading text-base font-bold text-slate-900">{formatRupiah(data.total_sales)}</div>
-            <div className="text-xs text-emerald-600">Profit: {formatRupiah(data.total_profit)}</div>
+        <div className="pt-3 mt-2 border-t border-slate-100 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Setoran Mitra</span>
+            <span className="font-heading text-base font-bold text-slate-900">{formatRupiah(data.total_setoran)}</span>
+          </div>
+          <div className="flex items-center justify-between text-xs text-slate-500">
+            <span>Pendapatan warung</span>
+            <span>{formatRupiah(data.total_sales)}</span>
+          </div>
+          <div className="flex items-center justify-between text-xs text-emerald-600">
+            <span>Profit warung</span>
+            <span className="font-medium">{formatRupiah(data.total_profit)}</span>
           </div>
         </div>
       </CardContent>

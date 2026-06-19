@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { api, formatRupiah, todayStr } from "@/lib/api";
+import { api, formatRupiah, todayStr, formatDateID } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -13,7 +13,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, Printer, Receipt as ReceiptIcon } from "lucide-react";
+import { Plus, Trash2, Printer, Eye, Receipt as ReceiptIcon } from "lucide-react";
 import { toast } from "sonner";
 import Receipt from "@/components/Receipt";
 
@@ -21,6 +21,7 @@ export default function TransactionsPage() {
   const [transactions, setTransactions] = useState([]);
   const [products, setProducts] = useState([]);
   const [open, setOpen] = useState(false);
+  const [detail, setDetail] = useState(null);
   const [filterDate, setFilterDate] = useState(todayStr());
   const [form, setForm] = useState({ product_id: "", jumlah_terjual: "", date: todayStr() });
   const [printData, setPrintData] = useState(null);
@@ -91,7 +92,6 @@ export default function TransactionsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Summary */}
       <div className="grid grid-cols-3 gap-4">
         <SummaryCard label="Pendapatan" value={formatRupiah(totalPendapatan)} />
         <SummaryCard label="Profit" value={formatRupiah(totalProfit)} accent />
@@ -111,76 +111,14 @@ export default function TransactionsPage() {
               className="w-44 focus-visible:ring-red-500/20 focus-visible:border-red-500"
               data-testid="filter-date-input"
             />
-            <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild>
-                <Button
-                  className="bg-red-600 hover:bg-red-700 text-white"
-                  disabled={products.length === 0}
-                  data-testid="add-transaction-button"
-                >
-                  <Plus size={16} className="mr-2" /> Input Penjualan
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle className="font-heading">Input Total Terjual</DialogTitle>
-                  <DialogDescription>
-                    Pilih produk dan masukkan jumlah yang terjual pada tanggal tertentu.
-                  </DialogDescription>
-                </DialogHeader>
-                <form onSubmit={onSubmit} className="space-y-4">
-                  <div>
-                    <Label>Produk</Label>
-                    <Select
-                      value={form.product_id}
-                      onValueChange={(v) => setForm({ ...form, product_id: v })}
-                    >
-                      <SelectTrigger className="mt-1.5" data-testid="tx-product-select">
-                        <SelectValue placeholder="Pilih produk..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {products.map((p) => (
-                          <SelectItem key={p.id} value={p.id} data-testid={`select-product-${p.id}`}>
-                            {p.mitra_name} - {p.menu} ({formatRupiah(p.harga_jual)})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="jumlah_terjual">Jumlah Terjual</Label>
-                    <Input
-                      id="jumlah_terjual"
-                      type="number"
-                      min="0"
-                      value={form.jumlah_terjual}
-                      onChange={(e) => setForm({ ...form, jumlah_terjual: e.target.value })}
-                      placeholder="0"
-                      className="mt-1.5 focus-visible:ring-red-500/20 focus-visible:border-red-500"
-                      required
-                      data-testid="tx-jumlah-input"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="tx-date">Tanggal</Label>
-                    <Input
-                      id="tx-date"
-                      type="date"
-                      value={form.date}
-                      onChange={(e) => setForm({ ...form, date: e.target.value })}
-                      className="mt-1.5 focus-visible:ring-red-500/20 focus-visible:border-red-500"
-                      required
-                      data-testid="tx-date-input"
-                    />
-                  </div>
-                  <DialogFooter>
-                    <Button type="submit" className="bg-red-600 hover:bg-red-700" data-testid="tx-save-button">
-                      Simpan
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
+            <Button
+              className="bg-red-600 hover:bg-red-700 text-white"
+              disabled={products.length === 0}
+              onClick={() => setOpen(true)}
+              data-testid="add-transaction-button"
+            >
+              <Plus size={16} className="mr-2" /> Input Penjualan
+            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -214,24 +152,38 @@ export default function TransactionsPage() {
                     <TableCell className="text-right font-medium">{formatRupiah(t.total_pendapatan)}</TableCell>
                     <TableCell className="text-right text-emerald-600 font-medium">{formatRupiah(t.profit)}</TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => printOne(t)}
-                        className="text-slate-600 hover:text-red-600 hover:bg-red-50"
-                        data-testid={`print-tx-${t.id}`}
-                      >
-                        <Printer size={16} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onDelete(t.id)}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        data-testid={`delete-tx-${t.id}`}
-                      >
-                        <Trash2 size={16} />
-                      </Button>
+                      <div className="inline-flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDetail(t)}
+                          className="text-slate-600 hover:text-red-600 hover:bg-red-50"
+                          data-testid={`detail-tx-${t.id}`}
+                          title="Lihat Detail"
+                        >
+                          <Eye size={16} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => printOne(t)}
+                          className="text-slate-600 hover:text-red-600 hover:bg-red-50"
+                          data-testid={`print-tx-${t.id}`}
+                          title="Cetak Struk"
+                        >
+                          <Printer size={16} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onDelete(t.id)}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          data-testid={`delete-tx-${t.id}`}
+                          title="Hapus"
+                        >
+                          <Trash2 size={16} />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -241,11 +193,136 @@ export default function TransactionsPage() {
         </CardContent>
       </Card>
 
+      {/* Input transaction dialog */}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-heading">Input Total Terjual</DialogTitle>
+            <DialogDescription>
+              Pilih produk dan masukkan jumlah yang terjual pada tanggal tertentu.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={onSubmit} className="space-y-4">
+            <div>
+              <Label>Produk</Label>
+              <Select
+                value={form.product_id}
+                onValueChange={(v) => setForm({ ...form, product_id: v })}
+              >
+                <SelectTrigger className="mt-1.5" data-testid="tx-product-select">
+                  <SelectValue placeholder="Pilih produk..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {products.map((p) => (
+                    <SelectItem key={p.id} value={p.id} data-testid={`select-product-${p.id}`}>
+                      {p.mitra_name} - {p.menu} ({formatRupiah(p.harga_jual)})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="jumlah_terjual">Jumlah Terjual</Label>
+              <Input
+                id="jumlah_terjual"
+                type="number"
+                min="0"
+                value={form.jumlah_terjual}
+                onChange={(e) => setForm({ ...form, jumlah_terjual: e.target.value })}
+                placeholder="0"
+                className="mt-1.5 focus-visible:ring-red-500/20 focus-visible:border-red-500"
+                required
+                data-testid="tx-jumlah-input"
+              />
+            </div>
+            <div>
+              <Label htmlFor="tx-date">Tanggal</Label>
+              <Input
+                id="tx-date"
+                type="date"
+                value={form.date}
+                onChange={(e) => setForm({ ...form, date: e.target.value })}
+                className="mt-1.5 focus-visible:ring-red-500/20 focus-visible:border-red-500"
+                required
+                data-testid="tx-date-input"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="submit" className="bg-red-600 hover:bg-red-700" data-testid="tx-save-button">
+                Simpan
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Detail transaction modal */}
+      <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
+        <DialogContent className="sm:max-w-md" data-testid="tx-detail-modal">
+          <DialogHeader>
+            <DialogTitle className="font-heading">Detail Transaksi</DialogTitle>
+            <DialogDescription>Ringkasan penjualan yang tercatat.</DialogDescription>
+          </DialogHeader>
+          {detail && (
+            <div className="space-y-1 divide-y divide-slate-100">
+              <DetailRow label="Tanggal" value={detail.date} />
+              <DetailRow label="Mitra" value={detail.mitra_name} />
+              <DetailRow label="Menu" value={detail.menu} />
+              <DetailRow label="Jumlah Terjual" value={`${detail.jumlah_terjual} pcs`} />
+              <DetailRow label="Harga Dari Mitra" value={formatRupiah(detail.harga_mitra)} />
+              <DetailRow label="Harga Jual" value={formatRupiah(detail.harga_jual)} />
+              <DetailRow label="Profit per Item" value={formatRupiah(detail.harga_jual - detail.harga_mitra)} />
+              <DetailRow
+                label="Setoran ke Mitra"
+                value={formatRupiah(detail.harga_mitra * detail.jumlah_terjual)}
+              />
+              <DetailRow label="Total Pendapatan" value={formatRupiah(detail.total_pendapatan)} strong />
+              <DetailRow label="Total Profit" value={formatRupiah(detail.profit)} highlight />
+              <DetailRow label="Dicatat pada" value={formatDateID(detail.created_at)} muted />
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => detail && printOne(detail)}
+              data-testid="detail-print-button"
+            >
+              <Printer size={16} className="mr-2" /> Cetak Struk
+            </Button>
+            <Button
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => setDetail(null)}
+              data-testid="detail-close-button"
+            >
+              Tutup
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {printData && (
         <div id="print-area">
           <Receipt {...printData} />
         </div>
       )}
+    </div>
+  );
+}
+
+function DetailRow({ label, value, strong, highlight, muted }) {
+  return (
+    <div className="flex items-center justify-between py-2 text-sm">
+      <span className="text-slate-500">{label}</span>
+      <span
+        className={[
+          "font-medium",
+          strong ? "text-slate-900 text-base" : "",
+          highlight ? "text-emerald-600 font-semibold" : "text-slate-800",
+          muted ? "text-slate-500 font-normal text-xs" : "",
+        ].join(" ")}
+      >
+        {value}
+      </span>
     </div>
   );
 }
