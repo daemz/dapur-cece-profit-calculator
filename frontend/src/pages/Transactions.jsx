@@ -269,11 +269,11 @@ export default function TransactionsPage() {
               <DetailRow label="Mitra" value={detail.mitra_name} />
               <DetailRow label="Menu" value={detail.menu} />
               <DetailRow label="Jumlah Terjual" value={`${detail.jumlah_terjual} pcs`} />
-              <DetailRow label="Harga Dari Mitra" value={formatRupiah(detail.harga_mitra)} />
+              <DetailRow label="Harga Mitra" value={formatRupiah(detail.harga_mitra)} />
               <DetailRow label="Harga Jual" value={formatRupiah(detail.harga_jual)} />
               <DetailRow label="Profit per Item" value={formatRupiah(detail.harga_jual - detail.harga_mitra)} />
               <DetailRow
-                label="Setoran ke Mitra"
+                label="Setoran Mitra"
                 value={formatRupiah(detail.harga_mitra * detail.jumlah_terjual)}
               />
               <DetailRow label="Total Pendapatan" value={formatRupiah(detail.total_pendapatan)} strong />
