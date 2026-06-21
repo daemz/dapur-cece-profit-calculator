@@ -1,55 +1,75 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { api, formatRupiah } from "@/lib/api";
 import { exportDashboardPDF, exportMitraPDF } from "@/lib/pdf";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  LineChart,
-  Line,
-  Legend,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
+  CartesianGrid, LineChart, Line, Legend,
 } from "recharts";
-import { TrendingUp, Wallet, Package, Store, Download, Printer, FileText } from "lucide-react";
+import {
+  TrendingUp, Wallet, Package, Store, Download, Printer, FileText, Building2,
+} from "lucide-react";
 import { toast } from "sonner";
 import Receipt from "@/components/Receipt";
 
+const ALL = "__all__";
+
 export default function Dashboard() {
   const [data, setData] = useState(null);
+  const [cabangs, setCabangs] = useState([]);
+  const [selectedCabang, setSelectedCabang] = useState(ALL);
   const [period, setPeriod] = useState("daily");
   const [chart, setChart] = useState(null);
   const [printData, setPrintData] = useState(null);
 
-  const loadDashboard = async () => {
+  const loadCabangs = async () => {
     try {
-      const r = await api.get("/dashboard/today");
+      const r = await api.get("/cabang");
+      setCabangs(r.data);
+    } catch (_e) {
+      // ignore
+    }
+  };
+
+  const loadDashboard = async (cabangFilter) => {
+    try {
+      const q = cabangFilter && cabangFilter !== ALL ? `?cabang_id=${cabangFilter}` : "";
+      const r = await api.get(`/dashboard/today${q}`);
       setData(r.data);
     } catch (_e) {
       toast.error("Gagal memuat dashboard");
     }
   };
 
-  const loadChart = async (p) => {
+  const loadChart = async (p, cabangFilter) => {
     try {
-      const r = await api.get(`/dashboard/chart?period=${p}`);
+      const cq = cabangFilter && cabangFilter !== ALL ? `&cabang_id=${cabangFilter}` : "";
+      const r = await api.get(`/dashboard/chart?period=${p}${cq}`);
       setChart(r.data);
     } catch (_e) {
       toast.error("Gagal memuat grafik");
     }
   };
 
-  useEffect(() => {
-    loadDashboard();
-  }, []);
-  useEffect(() => {
-    loadChart(period);
-  }, [period]);
+  useEffect(() => { loadCabangs(); }, []);
+  useEffect(() => { loadDashboard(selectedCabang); }, [selectedCabang]);
+  useEffect(() => { loadChart(period, selectedCabang); }, [period, selectedCabang]);
+
+  // Group mitra cards by cabang for visual grouping
+  const groupedCards = useMemo(() => {
+    if (!data?.mitra_cards) return [];
+    const map = new Map();
+    data.mitra_cards.forEach((m) => {
+      if (!map.has(m.cabang_id)) map.set(m.cabang_id, { cabang_name: m.cabang_name, items: [] });
+      map.get(m.cabang_id).items.push(m);
+    });
+    return Array.from(map.entries()).map(([cabang_id, v]) => ({ cabang_id, ...v }));
+  }, [data]);
 
   const printAll = () => {
     if (!data) return;
@@ -57,48 +77,44 @@ export default function Dashboard() {
       m.items.map((it) => ({ ...it, mitra_name: m.mitra_name }))
     );
     setPrintData({
-      title: "STRUK PENJUALAN",
-      date: data.date,
-      items,
-      total: data.metrics.total_sales,
-      profit: data.metrics.total_profit,
+      title: "STRUK PENJUALAN", date: data.date, items,
+      total: data.metrics.total_sales, profit: data.metrics.total_profit,
     });
-    setTimeout(() => {
-      window.print();
-      setPrintData(null);
-    }, 200);
+    setTimeout(() => { window.print(); setPrintData(null); }, 200);
   };
 
   const metrics = data?.metrics || { total_sales: 0, total_profit: 0, total_items: 0, mitra_count: 0 };
 
   return (
     <div className="space-y-8" data-testid="dashboard-page">
+      {/* Cabang selector */}
+      <div className="flex items-center justify-between gap-3 flex-wrap no-print">
+        <div className="flex items-center gap-2">
+          <Building2 size={16} className="text-red-600" />
+          <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
+            Cabang
+          </span>
+          <Select value={selectedCabang} onValueChange={setSelectedCabang}>
+            <SelectTrigger className="w-60" data-testid="dashboard-cabang-select">
+              <SelectValue placeholder="Semua Cabang" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL} data-testid="dashboard-cabang-all">Semua Cabang</SelectItem>
+              {cabangs.map((c) => (
+                <SelectItem key={c.id} value={c.id} data-testid={`dashboard-cabang-${c.id}`}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <MetricCard
-          icon={Wallet}
-          label="Pendapatan Hari Ini"
-          value={formatRupiah(metrics.total_sales)}
-          testId="metric-sales"
-          accent
-        />
-        <MetricCard
-          icon={TrendingUp}
-          label="Profit Hari Ini"
-          value={formatRupiah(metrics.total_profit)}
-          testId="metric-profit"
-        />
-        <MetricCard
-          icon={Package}
-          label="Item Terjual"
-          value={metrics.total_items}
-          testId="metric-items"
-        />
-        <MetricCard
-          icon={Store}
-          label="Mitra Terdaftar"
-          value={metrics.mitra_count}
-          testId="metric-mitra"
-        />
+        <MetricCard icon={Wallet} label="Pendapatan Hari Ini" value={formatRupiah(metrics.total_sales)} testId="metric-sales" accent />
+        <MetricCard icon={TrendingUp} label="Profit Hari Ini" value={formatRupiah(metrics.total_profit)} testId="metric-profit" />
+        <MetricCard icon={Package} label="Item Terjual" value={metrics.total_items} testId="metric-items" />
+        <MetricCard icon={Store} label="Mitra Terdaftar" value={metrics.mitra_count} testId="metric-mitra" />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 no-print">
@@ -106,28 +122,33 @@ export default function Dashboard() {
           Kartu Mitra Hari Ini
         </h2>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => exportDashboardPDF(data)}
-            className="border-slate-300"
-            data-testid="export-pdf-button"
-          >
+          <Button variant="outline" onClick={() => exportDashboardPDF(data)}
+            className="border-slate-300" data-testid="export-pdf-button">
             <Download size={16} className="mr-2" /> Export PDF
           </Button>
-          <Button
-            onClick={printAll}
-            className="bg-red-600 hover:bg-red-700 text-white"
-            data-testid="print-receipt-button"
-          >
+          <Button onClick={printAll} className="bg-red-600 hover:bg-red-700 text-white" data-testid="print-receipt-button">
             <Printer size={16} className="mr-2" /> Cetak Struk
           </Button>
         </div>
       </div>
 
-      {data?.mitra_cards?.length ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {data.mitra_cards.map((m) => (
-            <MitraCard key={m.mitra_id} data={m} date={data.date} />
+      {groupedCards.length ? (
+        <div className="space-y-8">
+          {groupedCards.map((group) => (
+            <div key={group.cabang_id} data-testid={`dashboard-group-${group.cabang_id}`}>
+              <div className="flex items-center gap-2 mb-3">
+                <Building2 size={14} className="text-red-600" />
+                <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-slate-700">
+                  {group.cabang_name}
+                </h3>
+                <span className="text-xs text-slate-400">({group.items.length} mitra)</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                {group.items.map((m) => (
+                  <MitraCard key={m.mitra_id} data={m} date={data.date} />
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       ) : (
@@ -155,10 +176,7 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis dataKey="label" stroke="#64748b" fontSize={11} />
                   <YAxis stroke="#64748b" fontSize={11} tickFormatter={(v) => `${v/1000}k`} />
-                  <Tooltip
-                    formatter={(v) => formatRupiah(v)}
-                    contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }}
-                  />
+                  <Tooltip formatter={(v) => formatRupiah(v)} contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }} />
                   <Legend />
                   <Bar dataKey="sales" name="Pendapatan" fill="#dc2626" radius={[6, 6, 0, 0]} />
                   <Bar dataKey="profit" name="Profit" fill="#0f172a" radius={[6, 6, 0, 0]} />
@@ -168,10 +186,7 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis dataKey="label" stroke="#64748b" fontSize={11} />
                   <YAxis stroke="#64748b" fontSize={11} tickFormatter={(v) => `${v/1000}k`} />
-                  <Tooltip
-                    formatter={(v) => formatRupiah(v)}
-                    contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }}
-                  />
+                  <Tooltip formatter={(v) => formatRupiah(v)} contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }} />
                   <Legend />
                   <Line type="monotone" dataKey="sales" name="Pendapatan" stroke="#dc2626" strokeWidth={2.5} dot={{ r: 4 }} />
                   <Line type="monotone" dataKey="profit" name="Profit" stroke="#0f172a" strokeWidth={2.5} dot={{ r: 4 }} />
@@ -193,10 +208,7 @@ export default function Dashboard() {
 
 function MetricCard({ icon: Icon, label, value, testId, accent }) {
   return (
-    <Card
-      className={`border-slate-200 ${accent ? "bg-red-600 border-red-600 text-white" : "bg-white"}`}
-      data-testid={testId}
-    >
+    <Card className={`border-slate-200 ${accent ? "bg-red-600 border-red-600 text-white" : "bg-white"}`} data-testid={testId}>
       <CardContent className="p-6">
         <div className="flex items-start justify-between">
           <div>
@@ -265,15 +277,12 @@ function MitraCard({ data, date }) {
           </div>
         </div>
         <Button
-          variant="outline"
-          size="sm"
+          variant="outline" size="sm"
           className="w-full mt-2 border-slate-300 text-slate-700 hover:text-red-700 hover:border-red-200 hover:bg-red-50"
           onClick={() => exportMitraPDF(data, date)}
           disabled={data.items.length === 0}
           data-testid={`export-mitra-pdf-${data.mitra_id}`}
-        >
-          <FileText size={14} className="mr-2" /> Export PDF Mitra
-        </Button>
+        ><FileText size={14} className="mr-2" /> Export PDF Mitra</Button>
       </CardContent>
     </Card>
   );
@@ -290,7 +299,7 @@ function EmptyState() {
           Belum ada mitra terdaftar
         </h3>
         <p className="text-sm text-slate-500 mt-2 max-w-sm mx-auto">
-          Mulai dengan menambahkan mitra baru di menu <strong>Mitra</strong>, lalu tambahkan produk dan transaksi.
+          Tambahkan <strong>Cabang</strong> dulu, lalu Mitra, Produk, dan transaksi.
         </p>
       </CardContent>
     </Card>

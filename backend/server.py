@@ -15,6 +15,8 @@ from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depend
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 # ------------- DB -------------
 mongo_url = os.environ["MONGO_URL"]
@@ -24,6 +26,7 @@ db = client[os.environ["DB_NAME"]]
 # ------------- App -------------
 app = FastAPI(title="UMKM Sarapan API")
 api = APIRouter(prefix="/api")
+scheduler = AsyncIOScheduler(timezone="Asia/Jakarta")
 
 JWT_ALGO = "HS256"
 
@@ -106,20 +109,33 @@ class LoginIn(BaseModel):
     password: str
 
 
+class CabangIn(BaseModel):
+    name: str
+
+
+class Cabang(BaseModel):
+    id: str
+    name: str
+    created_at: str
+
+
 class MitraIn(BaseModel):
     name: str
+    cabang_id: str
 
 
 class Mitra(BaseModel):
     id: str
     name: str
+    cabang_id: str
+    cabang_name: str
     created_at: str
 
 
 class ProductIn(BaseModel):
     mitra_id: str
     menu: str
-    jumlah: int = Field(ge=0)  # qty titipan / stock for the day
+    jumlah: int = Field(ge=0)
     harga_mitra: float = Field(ge=0)
     harga_jual: float = Field(ge=0)
 
@@ -128,17 +144,20 @@ class Product(BaseModel):
     id: str
     mitra_id: str
     mitra_name: str
+    cabang_id: str
+    cabang_name: str
     menu: str
     jumlah: int
     harga_mitra: float
     harga_jual: float
+    last_reset_date: str
     created_at: str
 
 
 class TransactionIn(BaseModel):
     product_id: str
     jumlah_terjual: int = Field(ge=0)
-    date: Optional[str] = None  # YYYY-MM-DD
+    date: Optional[str] = None
 
 
 class Transaction(BaseModel):
@@ -146,6 +165,8 @@ class Transaction(BaseModel):
     product_id: str
     mitra_id: str
     mitra_name: str
+    cabang_id: str
+    cabang_name: str
     menu: str
     jumlah_terjual: int
     harga_mitra: float
@@ -162,7 +183,10 @@ def now_iso() -> str:
 
 
 def today_str() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    # Use Asia/Jakarta timezone for "today" so the business day boundary
+    # matches the user's local midnight reset.
+    tz = timezone(timedelta(hours=7))
+    return datetime.now(tz).strftime("%Y-%m-%d")
 
 
 def strip_mongo(doc: dict) -> dict:
@@ -170,30 +194,34 @@ def strip_mongo(doc: dict) -> dict:
     return doc
 
 
-# ------------- Auth Endpoints -------------
+async def get_or_create_default_cabang() -> dict:
+    cabang = await db.cabang.find_one({"name": "Cabang Utama"})
+    if cabang:
+        cabang.pop("_id", None)
+        return cabang
+    doc = {"id": str(uuid.uuid4()), "name": "Cabang Utama", "created_at": now_iso()}
+    await db.cabang.insert_one(doc)
+    return doc
+
+
+# ------------- Auth -------------
 @api.post("/auth/register")
 async def register(payload: RegisterIn, response: Response):
     email = payload.email.lower()
-    existing = await db.users.find_one({"email": email})
-    if existing:
+    if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="Email sudah terdaftar")
     user_id = str(uuid.uuid4())
     user_doc = {
-        "id": user_id,
-        "email": email,
-        "name": payload.name,
+        "id": user_id, "email": email, "name": payload.name,
         "password_hash": hash_password(payload.password),
-        "role": "user",
-        "created_at": now_iso(),
+        "role": "user", "created_at": now_iso(),
     }
     await db.users.insert_one(user_doc)
     access = create_access_token(user_id, email)
     refresh = create_refresh_token(user_id)
     set_auth_cookies(response, access, refresh)
-    return {
-        "id": user_id, "email": email, "name": payload.name, "role": "user",
-        "access_token": access, "refresh_token": refresh,
-    }
+    return {"id": user_id, "email": email, "name": payload.name, "role": "user",
+            "access_token": access, "refresh_token": refresh}
 
 
 @api.post("/auth/login")
@@ -205,11 +233,9 @@ async def login(payload: LoginIn, response: Response):
     access = create_access_token(user["id"], user["email"])
     refresh = create_refresh_token(user["id"])
     set_auth_cookies(response, access, refresh)
-    return {
-        "id": user["id"], "email": user["email"],
-        "name": user.get("name", ""), "role": user.get("role", "user"),
-        "access_token": access, "refresh_token": refresh,
-    }
+    return {"id": user["id"], "email": user["email"], "name": user.get("name", ""),
+            "role": user.get("role", "user"),
+            "access_token": access, "refresh_token": refresh}
 
 
 @api.post("/auth/logout")
@@ -246,20 +272,72 @@ async def refresh_token(request: Request, response: Response):
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 
 
+# ------------- Cabang -------------
+@api.post("/cabang", response_model=Cabang)
+async def create_cabang(payload: CabangIn, user=Depends(get_current_user)):
+    if await db.cabang.find_one({"name": payload.name}):
+        raise HTTPException(status_code=400, detail="Cabang sudah ada")
+    doc = {"id": str(uuid.uuid4()), "name": payload.name, "created_at": now_iso()}
+    await db.cabang.insert_one(doc)
+    return Cabang(**strip_mongo(doc))
+
+
+@api.get("/cabang", response_model=List[Cabang])
+async def list_cabang(user=Depends(get_current_user)):
+    items = await db.cabang.find({}, {"_id": 0}).sort("name", 1).to_list(1000)
+    return items
+
+
+@api.put("/cabang/{cabang_id}", response_model=Cabang)
+async def update_cabang(cabang_id: str, payload: CabangIn, user=Depends(get_current_user)):
+    existing = await db.cabang.find_one({"id": cabang_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Cabang tidak ditemukan")
+    dup = await db.cabang.find_one({"name": payload.name, "id": {"$ne": cabang_id}})
+    if dup:
+        raise HTTPException(status_code=400, detail="Nama cabang sudah dipakai")
+    await db.cabang.update_one({"id": cabang_id}, {"$set": {"name": payload.name}})
+    await db.mitra.update_many({"cabang_id": cabang_id}, {"$set": {"cabang_name": payload.name}})
+    await db.products.update_many({"cabang_id": cabang_id}, {"$set": {"cabang_name": payload.name}})
+    await db.transactions.update_many({"cabang_id": cabang_id}, {"$set": {"cabang_name": payload.name}})
+    updated = await db.cabang.find_one({"id": cabang_id}, {"_id": 0})
+    return Cabang(**updated)
+
+
+@api.delete("/cabang/{cabang_id}")
+async def delete_cabang(cabang_id: str, user=Depends(get_current_user)):
+    total_cabang = await db.cabang.count_documents({})
+    if total_cabang <= 1:
+        raise HTTPException(status_code=400, detail="Tidak bisa menghapus cabang terakhir")
+    await db.cabang.delete_one({"id": cabang_id})
+    # Cascade: delete mitra/products/transactions in that cabang
+    await db.mitra.delete_many({"cabang_id": cabang_id})
+    await db.products.delete_many({"cabang_id": cabang_id})
+    await db.transactions.delete_many({"cabang_id": cabang_id})
+    return {"ok": True}
+
+
 # ------------- Mitra -------------
 @api.post("/mitra", response_model=Mitra)
 async def create_mitra(payload: MitraIn, user=Depends(get_current_user)):
-    existing = await db.mitra.find_one({"name": payload.name})
-    if existing:
-        raise HTTPException(status_code=400, detail="Mitra sudah ada")
-    doc = {"id": str(uuid.uuid4()), "name": payload.name, "created_at": now_iso()}
+    cabang = await db.cabang.find_one({"id": payload.cabang_id})
+    if not cabang:
+        raise HTTPException(status_code=404, detail="Cabang tidak ditemukan")
+    if await db.mitra.find_one({"name": payload.name, "cabang_id": payload.cabang_id}):
+        raise HTTPException(status_code=400, detail="Mitra sudah ada di cabang ini")
+    doc = {
+        "id": str(uuid.uuid4()), "name": payload.name,
+        "cabang_id": cabang["id"], "cabang_name": cabang["name"],
+        "created_at": now_iso(),
+    }
     await db.mitra.insert_one(doc)
     return Mitra(**strip_mongo(doc))
 
 
 @api.get("/mitra", response_model=List[Mitra])
-async def list_mitra(user=Depends(get_current_user)):
-    items = await db.mitra.find({}, {"_id": 0}).sort("name", 1).to_list(1000)
+async def list_mitra(cabang_id: Optional[str] = None, user=Depends(get_current_user)):
+    q = {"cabang_id": cabang_id} if cabang_id else {}
+    items = await db.mitra.find(q, {"_id": 0}).sort([("cabang_name", 1), ("name", 1)]).to_list(2000)
     return items
 
 
@@ -268,12 +346,24 @@ async def update_mitra(mitra_id: str, payload: MitraIn, user=Depends(get_current
     existing = await db.mitra.find_one({"id": mitra_id})
     if not existing:
         raise HTTPException(status_code=404, detail="Mitra tidak ditemukan")
-    dup = await db.mitra.find_one({"name": payload.name, "id": {"$ne": mitra_id}})
+    cabang = await db.cabang.find_one({"id": payload.cabang_id})
+    if not cabang:
+        raise HTTPException(status_code=404, detail="Cabang tidak ditemukan")
+    dup = await db.mitra.find_one({
+        "name": payload.name, "cabang_id": payload.cabang_id, "id": {"$ne": mitra_id},
+    })
     if dup:
-        raise HTTPException(status_code=400, detail="Nama mitra sudah dipakai")
-    await db.mitra.update_one({"id": mitra_id}, {"$set": {"name": payload.name}})
-    await db.products.update_many({"mitra_id": mitra_id}, {"$set": {"mitra_name": payload.name}})
-    await db.transactions.update_many({"mitra_id": mitra_id}, {"$set": {"mitra_name": payload.name}})
+        raise HTTPException(status_code=400, detail="Nama mitra sudah dipakai di cabang ini")
+    update = {"name": payload.name, "cabang_id": cabang["id"], "cabang_name": cabang["name"]}
+    await db.mitra.update_one({"id": mitra_id}, {"$set": update})
+    await db.products.update_many(
+        {"mitra_id": mitra_id},
+        {"$set": {"mitra_name": payload.name, "cabang_id": cabang["id"], "cabang_name": cabang["name"]}},
+    )
+    await db.transactions.update_many(
+        {"mitra_id": mitra_id},
+        {"$set": {"mitra_name": payload.name, "cabang_id": cabang["id"], "cabang_name": cabang["name"]}},
+    )
     updated = await db.mitra.find_one({"id": mitra_id}, {"_id": 0})
     return Mitra(**updated)
 
@@ -296,10 +386,13 @@ async def create_product(payload: ProductIn, user=Depends(get_current_user)):
         "id": str(uuid.uuid4()),
         "mitra_id": payload.mitra_id,
         "mitra_name": mitra["name"],
+        "cabang_id": mitra["cabang_id"],
+        "cabang_name": mitra["cabang_name"],
         "menu": payload.menu,
         "jumlah": payload.jumlah,
         "harga_mitra": payload.harga_mitra,
         "harga_jual": payload.harga_jual,
+        "last_reset_date": today_str(),
         "created_at": now_iso(),
     }
     await db.products.insert_one(doc)
@@ -307,8 +400,19 @@ async def create_product(payload: ProductIn, user=Depends(get_current_user)):
 
 
 @api.get("/products", response_model=List[Product])
-async def list_products(user=Depends(get_current_user)):
-    items = await db.products.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
+async def list_products(
+    cabang_id: Optional[str] = None,
+    mitra_id: Optional[str] = None,
+    user=Depends(get_current_user),
+):
+    # Lazy daily reset safety net (in case scheduler missed)
+    await _reset_products_if_stale()
+    q = {}
+    if cabang_id:
+        q["cabang_id"] = cabang_id
+    if mitra_id:
+        q["mitra_id"] = mitra_id
+    items = await db.products.find(q, {"_id": 0}).sort([("cabang_name", 1), ("mitra_name", 1), ("menu", 1)]).to_list(5000)
     return items
 
 
@@ -318,19 +422,18 @@ async def update_product(product_id: str, payload: ProductIn, user=Depends(get_c
     if not mitra:
         raise HTTPException(status_code=404, detail="Mitra tidak ditemukan")
     update = {
-        "mitra_id": payload.mitra_id,
-        "mitra_name": mitra["name"],
-        "menu": payload.menu,
-        "jumlah": payload.jumlah,
-        "harga_mitra": payload.harga_mitra,
-        "harga_jual": payload.harga_jual,
+        "mitra_id": payload.mitra_id, "mitra_name": mitra["name"],
+        "cabang_id": mitra["cabang_id"], "cabang_name": mitra["cabang_name"],
+        "menu": payload.menu, "jumlah": payload.jumlah,
+        "harga_mitra": payload.harga_mitra, "harga_jual": payload.harga_jual,
     }
     result = await db.products.find_one_and_update(
         {"id": product_id}, {"$set": update}, return_document=True
     )
     if not result:
         raise HTTPException(status_code=404, detail="Produk tidak ditemukan")
-    return Product(**strip_mongo(result))
+    result.pop("_id", None)
+    return Product(**result)
 
 
 @api.delete("/products/{product_id}")
@@ -347,6 +450,24 @@ async def create_transaction(payload: TransactionIn, user=Depends(get_current_us
     if not product:
         raise HTTPException(status_code=404, detail="Produk tidak ditemukan")
     date = payload.date or today_str()
+
+    # Validate stock: jumlah_terjual + already-sold-on-date must not exceed product.jumlah
+    pipeline = [
+        {"$match": {"product_id": product["id"], "date": date}},
+        {"$group": {"_id": None, "sold": {"$sum": "$jumlah_terjual"}}},
+    ]
+    agg = await db.transactions.aggregate(pipeline).to_list(1)
+    already_sold = agg[0]["sold"] if agg else 0
+    remaining = product["jumlah"] - already_sold
+    if payload.jumlah_terjual > remaining:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Jumlah melebihi stok. Stok tersisa untuk {product['menu']}: "
+                f"{remaining} (titipan {product['jumlah']}, sudah terjual {already_sold})."
+            ),
+        )
+
     total_pendapatan = product["harga_jual"] * payload.jumlah_terjual
     profit = (product["harga_jual"] - product["harga_mitra"]) * payload.jumlah_terjual
     doc = {
@@ -354,6 +475,8 @@ async def create_transaction(payload: TransactionIn, user=Depends(get_current_us
         "product_id": product["id"],
         "mitra_id": product["mitra_id"],
         "mitra_name": product["mitra_name"],
+        "cabang_id": product["cabang_id"],
+        "cabang_name": product["cabang_name"],
         "menu": product["menu"],
         "jumlah_terjual": payload.jumlah_terjual,
         "harga_mitra": product["harga_mitra"],
@@ -371,6 +494,7 @@ async def create_transaction(payload: TransactionIn, user=Depends(get_current_us
 async def list_transactions(
     date: Optional[str] = None,
     mitra_id: Optional[str] = None,
+    cabang_id: Optional[str] = None,
     user=Depends(get_current_user),
 ):
     q = {}
@@ -378,6 +502,8 @@ async def list_transactions(
         q["date"] = date
     if mitra_id:
         q["mitra_id"] = mitra_id
+    if cabang_id:
+        q["cabang_id"] = cabang_id
     items = await db.transactions.find(q, {"_id": 0}).sort("created_at", -1).to_list(5000)
     return items
 
@@ -390,17 +516,22 @@ async def delete_transaction(tx_id: str, user=Depends(get_current_user)):
 
 # ------------- Dashboard -------------
 @api.get("/dashboard/today")
-async def dashboard_today(user=Depends(get_current_user)):
+async def dashboard_today(cabang_id: Optional[str] = None, user=Depends(get_current_user)):
     today = today_str()
-    mitras = await db.mitra.find({}, {"_id": 0}).sort("name", 1).to_list(1000)
-    txs = await db.transactions.find({"date": today}, {"_id": 0}).to_list(5000)
+    cab_q = {"id": cabang_id} if cabang_id else {}
+    mitras = await db.mitra.find(
+        {"cabang_id": cabang_id} if cabang_id else {}, {"_id": 0}
+    ).sort([("cabang_name", 1), ("name", 1)]).to_list(2000)
+    tx_q = {"date": today}
+    if cabang_id:
+        tx_q["cabang_id"] = cabang_id
+    txs = await db.transactions.find(tx_q, {"_id": 0}).to_list(5000)
 
-    # Metrics
     total_sales = sum(t["total_pendapatan"] for t in txs)
     total_profit = sum(t["profit"] for t in txs)
     total_items = sum(t["jumlah_terjual"] for t in txs)
+    cabangs_in_view = await db.cabang.find(cab_q, {"_id": 0}).sort("name", 1).to_list(1000)
 
-    # Group by mitra
     cards = []
     for m in mitras:
         m_txs = [t for t in txs if t["mitra_id"] == m["id"]]
@@ -412,48 +543,46 @@ async def dashboard_today(user=Depends(get_current_user)):
         for t in m_txs:
             setoran = t["harga_mitra"] * t["jumlah_terjual"]
             items.append({
-                "menu": t["menu"],
-                "jumlah_terjual": t["jumlah_terjual"],
-                "harga_mitra": t["harga_mitra"],
-                "harga_jual": t["harga_jual"],
+                "menu": t["menu"], "jumlah_terjual": t["jumlah_terjual"],
+                "harga_mitra": t["harga_mitra"], "harga_jual": t["harga_jual"],
                 "setoran_mitra": setoran,
-                "total_pendapatan": t["total_pendapatan"],
-                "profit": t["profit"],
+                "total_pendapatan": t["total_pendapatan"], "profit": t["profit"],
             })
             m_sales += t["total_pendapatan"]
             m_profit += t["profit"]
             m_setoran += setoran
             m_count += t["jumlah_terjual"]
         cards.append({
-            "mitra_id": m["id"],
-            "mitra_name": m["name"],
+            "mitra_id": m["id"], "mitra_name": m["name"],
+            "cabang_id": m["cabang_id"], "cabang_name": m["cabang_name"],
             "items": items,
-            "total_sales": m_sales,
-            "total_profit": m_profit,
-            "total_setoran": m_setoran,
-            "total_items": m_count,
+            "total_sales": m_sales, "total_profit": m_profit,
+            "total_setoran": m_setoran, "total_items": m_count,
         })
 
     return {
         "date": today,
         "metrics": {
-            "total_sales": total_sales,
-            "total_profit": total_profit,
-            "total_items": total_items,
-            "mitra_count": len(mitras),
+            "total_sales": total_sales, "total_profit": total_profit,
+            "total_items": total_items, "mitra_count": len(mitras),
         },
+        "cabangs": cabangs_in_view,
         "mitra_cards": cards,
     }
 
 
 @api.get("/dashboard/chart")
-async def dashboard_chart(period: str = "daily", user=Depends(get_current_user)):
-    """period: daily (last 7 days), weekly (last 8 weeks), monthly (last 6 months)"""
-    now = datetime.now(timezone.utc)
-    txs = await db.transactions.find({}, {"_id": 0}).to_list(50000)
+async def dashboard_chart(
+    period: str = "daily",
+    cabang_id: Optional[str] = None,
+    user=Depends(get_current_user),
+):
+    now = datetime.now(timezone(timedelta(hours=7)))
+    q = {"cabang_id": cabang_id} if cabang_id else {}
+    txs = await db.transactions.find(q, {"_id": 0}).to_list(50000)
 
-    def parse_date(s: str) -> datetime:
-        return datetime.strptime(s, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    def parse_date(s: str):
+        return datetime.strptime(s, "%Y-%m-%d").date()
 
     buckets = {}
     labels = []
@@ -469,7 +598,6 @@ async def dashboard_chart(period: str = "daily", user=Depends(get_current_user))
                 buckets[t["date"]]["profit"] += t["profit"]
                 buckets[t["date"]]["items"] += t["jumlah_terjual"]
     elif period == "weekly":
-        # Last 8 weeks (Mon-Sun)
         today = now.date()
         for i in range(7, -1, -1):
             week_end = today - timedelta(days=today.weekday()) - timedelta(weeks=i - 1, days=1)
@@ -481,7 +609,7 @@ async def dashboard_chart(period: str = "daily", user=Depends(get_current_user))
             labels.append(key)
         for t in txs:
             try:
-                td = parse_date(t["date"]).date()
+                td = parse_date(t["date"])
             except Exception:
                 continue
             for key in labels:
@@ -491,7 +619,7 @@ async def dashboard_chart(period: str = "daily", user=Depends(get_current_user))
                     b["profit"] += t["profit"]
                     b["items"] += t["jumlah_terjual"]
                     break
-    else:  # monthly
+    else:
         for i in range(5, -1, -1):
             y = now.year
             m = now.month - i
@@ -512,34 +640,76 @@ async def dashboard_chart(period: str = "daily", user=Depends(get_current_user))
     series = []
     for k in labels:
         b = buckets[k]
-        series.append({
-            "label": b["label"],
-            "sales": round(b["sales"], 2),
-            "profit": round(b["profit"], 2),
-            "items": b["items"],
-        })
+        series.append({"label": b["label"], "sales": round(b["sales"], 2),
+                        "profit": round(b["profit"], 2), "items": b["items"]})
     return {"period": period, "series": series}
+
+
+# ------------- Daily Product Reset -------------
+async def _reset_products_if_stale():
+    """Lazy fallback: reset products whose last_reset_date is not today."""
+    today = today_str()
+    await db.products.update_many(
+        {"last_reset_date": {"$ne": today}},
+        {"$set": {"jumlah": 0, "last_reset_date": today}},
+    )
+
+
+async def reset_all_products_daily():
+    today = today_str()
+    result = await db.products.update_many(
+        {}, {"$set": {"jumlah": 0, "last_reset_date": today}}
+    )
+    logging.info(f"[scheduler] Daily reset done at {today}, matched={result.matched_count}")
+
+
+async def _migrate_legacy_documents():
+    """Ensure all existing mitra/product/transaction docs have cabang fields."""
+    needs_migration = (
+        await db.mitra.find_one({"cabang_id": {"$exists": False}})
+        or await db.products.find_one({"cabang_id": {"$exists": False}})
+        or await db.transactions.find_one({"cabang_id": {"$exists": False}})
+    )
+    if not needs_migration:
+        return
+    default_cabang = await get_or_create_default_cabang()
+    update = {"cabang_id": default_cabang["id"], "cabang_name": default_cabang["name"]}
+    await db.mitra.update_many({"cabang_id": {"$exists": False}}, {"$set": update})
+    await db.products.update_many({"cabang_id": {"$exists": False}}, {"$set": update})
+    await db.transactions.update_many({"cabang_id": {"$exists": False}}, {"$set": update})
+    await db.products.update_many(
+        {"last_reset_date": {"$exists": False}},
+        {"$set": {"last_reset_date": today_str()}},
+    )
 
 
 # ------------- Startup -------------
 @app.on_event("startup")
 async def on_startup():
     await db.users.create_index("email", unique=True)
-    await db.mitra.create_index("name", unique=True)
+    await db.cabang.create_index("name", unique=True)
+    # Drop legacy single-field unique index on mitra.name (from pre-cabang schema)
+    try:
+        existing_indexes = await db.mitra.index_information()
+        if "name_1" in existing_indexes and existing_indexes["name_1"].get("unique"):
+            await db.mitra.drop_index("name_1")
+    except Exception as _e:
+        logging.warning(f"could not drop legacy mitra.name_1 index: {_e}")
+    await db.mitra.create_index([("name", 1), ("cabang_id", 1)])
     await db.products.create_index("mitra_id")
+    await db.products.create_index("cabang_id")
     await db.transactions.create_index("date")
+    await db.transactions.create_index("cabang_id")
+
     # Seed admin
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@sarapan.id")
     admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
     existing = await db.users.find_one({"email": admin_email})
     if existing is None:
         await db.users.insert_one({
-            "id": str(uuid.uuid4()),
-            "email": admin_email,
+            "id": str(uuid.uuid4()), "email": admin_email,
             "password_hash": hash_password(admin_password),
-            "name": "Admin",
-            "role": "admin",
-            "created_at": now_iso(),
+            "name": "Admin", "role": "admin", "created_at": now_iso(),
         })
     elif not verify_password(admin_password, existing.get("password_hash", "")):
         await db.users.update_one(
@@ -547,9 +717,29 @@ async def on_startup():
             {"$set": {"password_hash": hash_password(admin_password)}},
         )
 
+    # Ensure at least one cabang exists
+    await get_or_create_default_cabang()
+    # Migrate legacy data
+    await _migrate_legacy_documents()
+    # Lazy reset on startup
+    await _reset_products_if_stale()
+
+    # Schedule daily reset at 23:59 Asia/Jakarta
+    if not scheduler.running:
+        scheduler.add_job(
+            reset_all_products_daily,
+            CronTrigger(hour=23, minute=59, timezone="Asia/Jakarta"),
+            id="daily_product_reset",
+            replace_existing=True,
+        )
+        scheduler.start()
+        logging.info("[scheduler] started; daily product reset at 23:59 Asia/Jakarta")
+
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    if scheduler.running:
+        scheduler.shutdown(wait=False)
     client.close()
 
 

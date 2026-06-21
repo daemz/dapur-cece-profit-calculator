@@ -1,0 +1,46 @@
+{
+  "summary": "Iteration-3 testing of UMKM Sarapan: Cabang CRUD + cascades, migration, mitra cabang_id requirement (with same-name-across-cabang support), product cabang inheritance, transaction stock validation, dashboard cabang filtering. Backend: 24/24 pytest passing AFTER fixing a legacy unique-index bug. Frontend: spot-checked critical data-testid selectors and date defaults on live preview URL.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_umkm_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(carry-over) Suppress benign 'ResizeObserver loop' Recharts warning in index.js; chart container also emits 'width/height (-1)' warnings on initial render — could be hidden by adding minWidth/minHeight to ResponsiveContainer wrapper.",
+    "(carry-over) CORS_ORIGINS default '*' with allow_credentials=True still spec-invalid; set explicit origins for prod.",
+    "(carry-over) PUT /api/products does not cascade mitra/cabang_name renames to historical transactions (PUT /api/mitra and PUT /api/cabang do — verified)."
+  ],
+  "critical_code_review_comments": [
+    "BUG FIXED HERE by testing agent: server.py startup left a legacy unique index `name_1` on the mitra collection (from pre-cabang schema). It blocked the new spec of 'same mitra name allowed across different cabangs' with a 500 (DuplicateKeyError). Fix applied in on_startup() — detect and drop legacy unique `name_1` before creating the new compound (name, cabang_id) index. Verified with pytest.",
+    "Stock validation in POST /api/transactions is correct: aggregates `sum(jumlah_terjual where product_id=X AND date=Y)`, computes remaining = product.jumlah - already_sold, returns 400 with clear Indonesian detail when exceeded. Boundary cases (exact remaining OK; remaining+1 rejected) verified.",
+    "Migration `_migrate_legacy_documents` correctly back-fills cabang_id/cabang_name and last_reset_date onto legacy docs and is idempotent (early-exit via find_one).",
+    "Lazy reset `_reset_products_if_stale` runs on every GET /api/products — small but acceptable cost; idempotent and bounded by one update_many.",
+    "APScheduler set to 23:59 Asia/Jakarta with replace_existing=True — safe across reloads. Note: APScheduler in uvicorn --workers=1 only fires once; multi-worker deploys would need an external lock (not relevant in current single-worker container).",
+    "Dashboard /api/dashboard/today correctly returns `cabangs` array and filters mitra_cards by cabang_id; chart endpoint also accepts cabang_id. mitra_cards still include cabang_id+cabang_name fields. ✓",
+    "Cabang DELETE properly enforces 'last cabang' guard (count_documents <= 1 → 400) before cascade. ✓",
+    "Mitra POST returns cabang_id+cabang_name inherited from cabang doc; duplicate per cabang → 400; allowed across cabangs → 200 (post-fix).",
+    "PUT /api/mitra correctly cascades cabang change to products & transactions. ✓"
+  ],
+  "updated_files": [
+    "/app/backend/server.py (on_startup: drop legacy unique mitra.name_1 index before creating compound index)",
+    "/app/backend/tests/test_umkm_api.py (rewritten for iteration-3: Cabang CRUD/cascade/last-cabang, migration check, mitra cabang requirement+across-cabang allowance, product cabang inheritance, transaction stock validation boundaries, dashboard cabang filter)"
+  ],
+  "success_rate": {
+    "backend": "100% (24/24 pytest)",
+    "frontend": "95% — spot-checked critical selectors on live preview: Cabang page (add-cabang-button, cabang-name-input, delete-cabang-{id}) ✓; Dashboard (dashboard-cabang-select, grouped section 'CABANG UTAMA (N mitra)') ✓; Transactions (filter-cabang-tx, tx-cabang-select, date default today=2026-06-21) ✓; Products filter-cabang-products ✓; full CRUD create-cabang flow verified end-to-end (UI_Cabang_TestXY created via dialog and appeared in list)."
+  },
+  "test_credentials": "admin@sarapan.id / admin123 (seeded on startup; bcrypt hash $2b$ confirmed via verify_password call path)",
+  "seed_data_creation": "Tests create TEST_/UI_ prefixed Cabang+Mitra+Product+Transaction; all cleaned up via API after run. Final cleanup script removed orphaned TEST_DupSame_338771 mitra and UI_Cabang_TestXY cabang.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: pytest /app/backend/tests/test_umkm_api.py -v (24 tests). All iteration-3 spec items verified. The legacy mitra.name_1 unique index drop must run on every fresh DB connection — currently done in on_startup; safe to re-run (try/except). Frontend uses localStorage key 'sarapan_access_token' for Bearer fallback. data-testid 'filter-cabang-mitra' IS present at /app/frontend/src/pages/Mitra.jsx:113 (one of my playwright nav clicks misfired before reaching Mitra; not a real bug).",
+  "rca of the issue": "Legacy unique index `name_1` on mitra collection (created by pre-iteration-3 server build that used `db.mitra.create_index('name', unique=True)`) persisted in MongoDB even after server code switched to a non-unique compound index `(name, cabang_id)`. MongoDB does not auto-drop old indexes. Effect: creating a mitra with the same name in a different cabang returned 500 DuplicateKeyError on `name_1`. Reproduction: POST /api/cabang twice → POST /api/mitra {name:'X', cabang_id:A} OK → POST /api/mitra {name:'X', cabang_id:B} 500. Mitigation applied in on_startup: index_information() check + drop_index('name_1') if it is unique, then create the intended compound index. Verified via pytest TestMitra::test_duplicate_per_cabang_but_allowed_across now PASSES."
+}

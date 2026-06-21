@@ -7,6 +7,7 @@ import Layout from "@/components/Layout";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import Dashboard from "@/pages/Dashboard";
+import CabangPage from "@/pages/Cabang";
 import MitraPage from "@/pages/Mitra";
 import ProductsPage from "@/pages/Products";
 import TransactionsPage from "@/pages/Transactions";
@@ -25,6 +26,14 @@ function App() {
                 element={
                   <Layout>
                     <Dashboard />
+                  </Layout>
+                }
+              />
+              <Route
+                path="/cabang"
+                element={
+                  <Layout>
+                    <CabangPage />
                   </Layout>
                 }
               />

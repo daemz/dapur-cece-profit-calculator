@@ -2,11 +2,12 @@ import React from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Package, Receipt, Users, LogOut, Sandwich } from "lucide-react";
+import { LayoutDashboard, Package, Receipt, Users, LogOut, Sandwich, Building2 } from "lucide-react";
 import { formatDateID } from "@/lib/api";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard", testId: "nav-dashboard" },
+  { to: "/cabang", icon: Building2, label: "Cabang", testId: "nav-cabang" },
   { to: "/mitra", icon: Users, label: "Mitra", testId: "nav-mitra" },
   { to: "/products", icon: Package, label: "Produk", testId: "nav-products" },
   { to: "/transactions", icon: Receipt, label: "Transaksi", testId: "nav-transactions" },

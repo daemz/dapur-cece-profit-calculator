@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { api, formatRupiah, todayStr, formatDateID } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,42 +18,90 @@ import { toast } from "sonner";
 import Receipt from "@/components/Receipt";
 import ConfirmDialog from "@/components/ConfirmDialog";
 
+const ALL = "__all__";
+
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState([]);
   const [products, setProducts] = useState([]);
+  const [cabangs, setCabangs] = useState([]);
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState(null);
   const [filterDate, setFilterDate] = useState(todayStr());
-  const [form, setForm] = useState({ product_id: "", jumlah_terjual: "", date: todayStr() });
+  const [filterCabang, setFilterCabang] = useState(ALL);
+  const [form, setForm] = useState({
+    cabang_id: "", product_id: "", jumlah_terjual: "", date: todayStr(),
+  });
   const [printData, setPrintData] = useState(null);
   const [toDelete, setToDelete] = useState(null);
 
   const load = async () => {
     try {
-      const [t, p] = await Promise.all([
-        api.get(`/transactions${filterDate ? `?date=${filterDate}` : ""}`),
+      const params = new URLSearchParams();
+      if (filterDate) params.set("date", filterDate);
+      if (filterCabang !== ALL) params.set("cabang_id", filterCabang);
+      const [t, p, c] = await Promise.all([
+        api.get(`/transactions?${params.toString()}`),
         api.get("/products"),
+        api.get("/cabang"),
       ]);
       setTransactions(t.data);
       setProducts(p.data);
+      setCabangs(c.data);
     } catch {
       toast.error("Gagal memuat transaksi");
     }
   };
 
-  useEffect(() => { load(); }, [filterDate]);
+  useEffect(() => { load(); }, [filterDate, filterCabang]);
+
+  // Reset form on open: always default date to today
+  const openCreate = () => {
+    setForm({
+      cabang_id: filterCabang !== ALL ? filterCabang : (cabangs[0]?.id || ""),
+      product_id: "",
+      jumlah_terjual: "",
+      date: todayStr(),
+    });
+    setOpen(true);
+  };
+
+  const productsForForm = useMemo(() => {
+    if (!form.cabang_id) return [];
+    return products.filter((p) => p.cabang_id === form.cabang_id);
+  }, [products, form.cabang_id]);
+
+  const selectedProduct = useMemo(
+    () => products.find((p) => p.id === form.product_id) || null,
+    [products, form.product_id]
+  );
+
+  // Calculate remaining stock for selected product on selected date
+  const remainingStock = useMemo(() => {
+    if (!selectedProduct) return null;
+    const soldOnDate = transactions
+      .filter((t) => t.product_id === selectedProduct.id && t.date === form.date)
+      .reduce((a, t) => a + t.jumlah_terjual, 0);
+    return selectedProduct.jumlah - soldOnDate;
+  }, [selectedProduct, transactions, form.date]);
 
   const onSubmit = async (e) => {
     e.preventDefault();
+    if (!form.cabang_id) return toast.error("Pilih cabang terlebih dahulu");
     if (!form.product_id) return toast.error("Pilih produk terlebih dahulu");
+    const qty = parseInt(form.jumlah_terjual || "0", 10);
+    if (remainingStock != null && qty > remainingStock) {
+      return toast.error(
+        `Jumlah melebihi stok. Sisa stok: ${remainingStock} (titipan ${selectedProduct.jumlah}).`
+      );
+    }
     try {
       await api.post("/transactions", {
         product_id: form.product_id,
-        jumlah_terjual: parseInt(form.jumlah_terjual || "0", 10),
+        jumlah_terjual: qty,
         date: form.date || todayStr(),
       });
       toast.success("Transaksi ditambahkan");
-      setForm({ product_id: "", jumlah_terjual: "", date: todayStr() });
+      setForm({ cabang_id: form.cabang_id, product_id: "", jumlah_terjual: "", date: todayStr() });
       setOpen(false);
       load();
     } catch (e) {
@@ -66,29 +114,19 @@ export default function TransactionsPage() {
       await api.delete(`/transactions/${id}`);
       toast.success("Transaksi dihapus");
       load();
-    } catch {
-      toast.error("Gagal menghapus transaksi");
-    }
+    } catch { toast.error("Gagal menghapus transaksi"); }
   };
 
   const printOne = (tx) => {
     setPrintData({
-      title: "STRUK PEMBELIAN",
-      date: tx.date,
-      mitra_name: tx.mitra_name,
+      title: "STRUK PEMBELIAN", date: tx.date, mitra_name: tx.mitra_name,
       items: [{
-        menu: tx.menu,
-        jumlah_terjual: tx.jumlah_terjual,
-        harga_jual: tx.harga_jual,
-        total_pendapatan: tx.total_pendapatan,
+        menu: tx.menu, jumlah_terjual: tx.jumlah_terjual,
+        harga_jual: tx.harga_jual, total_pendapatan: tx.total_pendapatan,
       }],
-      total: tx.total_pendapatan,
-      profit: tx.profit,
+      total: tx.total_pendapatan, profit: tx.profit,
     });
-    setTimeout(() => {
-      window.print();
-      setPrintData(null);
-    }, 200);
+    setTimeout(() => { window.print(); setPrintData(null); }, 200);
   };
 
   const totalPendapatan = transactions.reduce((a, t) => a + t.total_pendapatan, 0);
@@ -108,10 +146,22 @@ export default function TransactionsPage() {
           <CardTitle className="font-heading text-xl font-semibold tracking-tight">
             Transaksi
           </CardTitle>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Select value={filterCabang} onValueChange={setFilterCabang}>
+              <SelectTrigger className="w-44" data-testid="filter-cabang-tx">
+                <SelectValue placeholder="Semua Cabang" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>Semua Cabang</SelectItem>
+                {cabangs.map((c) => (
+                  <SelectItem key={c.id} value={c.id} data-testid={`filter-cabang-tx-${c.id}`}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Input
-              type="date"
-              value={filterDate}
+              type="date" value={filterDate}
               onChange={(e) => setFilterDate(e.target.value)}
               className="w-44 focus-visible:ring-red-500/20 focus-visible:border-red-500"
               data-testid="filter-date-input"
@@ -119,28 +169,26 @@ export default function TransactionsPage() {
             <Button
               className="bg-red-600 hover:bg-red-700 text-white"
               disabled={products.length === 0}
-              onClick={() => setOpen(true)}
+              onClick={openCreate}
               data-testid="add-transaction-button"
-            >
-              <Plus size={16} className="mr-2" /> Input Penjualan
-            </Button>
+            ><Plus size={16} className="mr-2" /> Input Penjualan</Button>
           </div>
         </CardHeader>
         <CardContent>
           {transactions.length === 0 ? (
             <div className="text-center py-12">
               <ReceiptIcon size={36} className="text-slate-300 mx-auto" />
-              <p className="text-sm text-slate-500 mt-3">Belum ada transaksi pada tanggal ini.</p>
+              <p className="text-sm text-slate-500 mt-3">Belum ada transaksi pada filter ini.</p>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Tanggal</TableHead>
+                  <TableHead>Cabang</TableHead>
                   <TableHead>Mitra</TableHead>
                   <TableHead>Menu</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
-                  <TableHead className="text-right">Harga Jual</TableHead>
                   <TableHead className="text-right">Pendapatan</TableHead>
                   <TableHead className="text-right">Profit</TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
@@ -150,42 +198,27 @@ export default function TransactionsPage() {
                 {transactions.map((t) => (
                   <TableRow key={t.id} data-testid={`tx-row-${t.id}`}>
                     <TableCell className="text-slate-600 text-sm">{t.date}</TableCell>
+                    <TableCell className="text-slate-600 text-sm">{t.cabang_name}</TableCell>
                     <TableCell className="font-medium">{t.mitra_name}</TableCell>
                     <TableCell>{t.menu}</TableCell>
                     <TableCell className="text-right">{t.jumlah_terjual}</TableCell>
-                    <TableCell className="text-right text-slate-600">{formatRupiah(t.harga_jual)}</TableCell>
                     <TableCell className="text-right font-medium">{formatRupiah(t.total_pendapatan)}</TableCell>
                     <TableCell className="text-right text-emerald-600 font-medium">{formatRupiah(t.profit)}</TableCell>
                     <TableCell className="text-right">
                       <div className="inline-flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDetail(t)}
+                        <Button variant="ghost" size="sm" onClick={() => setDetail(t)}
                           className="text-slate-600 hover:text-red-600 hover:bg-red-50"
-                          data-testid={`detail-tx-${t.id}`}
-                          title="Lihat Detail"
-                        >
+                          data-testid={`detail-tx-${t.id}`} title="Detail">
                           <Eye size={16} />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => printOne(t)}
+                        <Button variant="ghost" size="sm" onClick={() => printOne(t)}
                           className="text-slate-600 hover:text-red-600 hover:bg-red-50"
-                          data-testid={`print-tx-${t.id}`}
-                          title="Cetak Struk"
-                        >
+                          data-testid={`print-tx-${t.id}`} title="Cetak Struk">
                           <Printer size={16} />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setToDelete(t)}
+                        <Button variant="ghost" size="sm" onClick={() => setToDelete(t)}
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          data-testid={`delete-tx-${t.id}`}
-                          title="Hapus"
-                        >
+                          data-testid={`delete-tx-${t.id}`} title="Hapus">
                           <Trash2 size={16} />
                         </Button>
                       </div>
@@ -198,16 +231,34 @@ export default function TransactionsPage() {
         </CardContent>
       </Card>
 
-      {/* Input transaction dialog */}
+      {/* Input penjualan */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-heading">Input Total Terjual</DialogTitle>
+            <DialogTitle className="font-heading">Input Penjualan</DialogTitle>
             <DialogDescription>
-              Pilih produk dan masukkan jumlah yang terjual pada tanggal tertentu.
+              Pilih cabang lalu produk; tanggal default hari ini.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={onSubmit} className="space-y-4">
+            <div>
+              <Label>Cabang</Label>
+              <Select
+                value={form.cabang_id}
+                onValueChange={(v) => setForm({ ...form, cabang_id: v, product_id: "" })}
+              >
+                <SelectTrigger className="mt-1.5" data-testid="tx-cabang-select">
+                  <SelectValue placeholder="Pilih cabang..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {cabangs.map((c) => (
+                    <SelectItem key={c.id} value={c.id} data-testid={`tx-form-cabang-${c.id}`}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div>
               <Label>Produk</Label>
               <Select
@@ -215,10 +266,10 @@ export default function TransactionsPage() {
                 onValueChange={(v) => setForm({ ...form, product_id: v })}
               >
                 <SelectTrigger className="mt-1.5" data-testid="tx-product-select">
-                  <SelectValue placeholder="Pilih produk..." />
+                  <SelectValue placeholder={form.cabang_id ? "Pilih produk..." : "Pilih cabang dulu"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {products.map((p) => (
+                  {productsForForm.map((p) => (
                     <SelectItem key={p.id} value={p.id} data-testid={`select-product-${p.id}`}>
                       {p.mitra_name} - {p.menu} ({formatRupiah(p.harga_jual)})
                     </SelectItem>
@@ -226,12 +277,19 @@ export default function TransactionsPage() {
                 </SelectContent>
               </Select>
             </div>
+            {selectedProduct && (
+              <div className="text-xs bg-slate-50 border border-slate-200 rounded-md px-3 py-2 flex items-center justify-between">
+                <span className="text-slate-600">Stok titipan: <strong>{selectedProduct.jumlah}</strong></span>
+                <span className={remainingStock <= 0 ? "text-red-600 font-medium" : "text-emerald-600 font-medium"}>
+                  Sisa: {remainingStock}
+                </span>
+              </div>
+            )}
             <div>
               <Label htmlFor="jumlah_terjual">Jumlah Terjual</Label>
               <Input
-                id="jumlah_terjual"
-                type="number"
-                min="0"
+                id="jumlah_terjual" type="number" min="0"
+                max={remainingStock != null ? remainingStock : undefined}
                 value={form.jumlah_terjual}
                 onChange={(e) => setForm({ ...form, jumlah_terjual: e.target.value })}
                 placeholder="0"
@@ -239,13 +297,14 @@ export default function TransactionsPage() {
                 required
                 data-testid="tx-jumlah-input"
               />
+              {remainingStock != null && remainingStock <= 0 && (
+                <p className="text-xs text-red-600 mt-1">Stok habis untuk tanggal ini.</p>
+              )}
             </div>
             <div>
               <Label htmlFor="tx-date">Tanggal</Label>
               <Input
-                id="tx-date"
-                type="date"
-                value={form.date}
+                id="tx-date" type="date" value={form.date}
                 onChange={(e) => setForm({ ...form, date: e.target.value })}
                 className="mt-1.5 focus-visible:ring-red-500/20 focus-visible:border-red-500"
                 required
@@ -253,15 +312,18 @@ export default function TransactionsPage() {
               />
             </div>
             <DialogFooter>
-              <Button type="submit" className="bg-red-600 hover:bg-red-700" data-testid="tx-save-button">
-                Simpan
-              </Button>
+              <Button
+                type="submit"
+                className="bg-red-600 hover:bg-red-700"
+                disabled={remainingStock != null && remainingStock <= 0}
+                data-testid="tx-save-button"
+              >Simpan</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Detail transaction modal */}
+      {/* Detail */}
       <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
         <DialogContent className="sm:max-w-md" data-testid="tx-detail-modal">
           <DialogHeader>
@@ -271,34 +333,24 @@ export default function TransactionsPage() {
           {detail && (
             <div className="space-y-1 divide-y divide-slate-100">
               <DetailRow label="Tanggal" value={detail.date} />
+              <DetailRow label="Cabang" value={detail.cabang_name} />
               <DetailRow label="Mitra" value={detail.mitra_name} />
               <DetailRow label="Menu" value={detail.menu} />
               <DetailRow label="Jumlah Terjual" value={`${detail.jumlah_terjual} pcs`} />
               <DetailRow label="Harga Mitra" value={formatRupiah(detail.harga_mitra)} />
               <DetailRow label="Harga Jual" value={formatRupiah(detail.harga_jual)} />
               <DetailRow label="Profit per Item" value={formatRupiah(detail.harga_jual - detail.harga_mitra)} />
-              <DetailRow
-                label="Setoran Mitra"
-                value={formatRupiah(detail.harga_mitra * detail.jumlah_terjual)}
-              />
+              <DetailRow label="Setoran Mitra" value={formatRupiah(detail.harga_mitra * detail.jumlah_terjual)} />
               <DetailRow label="Total Pendapatan" value={formatRupiah(detail.total_pendapatan)} strong />
               <DetailRow label="Total Profit" value={formatRupiah(detail.profit)} highlight />
               <DetailRow label="Dicatat pada" value={formatDateID(detail.created_at)} muted />
             </div>
           )}
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => detail && printOne(detail)}
-              data-testid="detail-print-button"
-            >
+            <Button variant="outline" onClick={() => detail && printOne(detail)} data-testid="detail-print-button">
               <Printer size={16} className="mr-2" /> Cetak Struk
             </Button>
-            <Button
-              className="bg-red-600 hover:bg-red-700"
-              onClick={() => setDetail(null)}
-              data-testid="detail-close-button"
-            >
+            <Button className="bg-red-600 hover:bg-red-700" onClick={() => setDetail(null)} data-testid="detail-close-button">
               Tutup
             </Button>
           </DialogFooter>
@@ -315,11 +367,9 @@ export default function TransactionsPage() {
         open={!!toDelete}
         onOpenChange={(o) => !o && setToDelete(null)}
         title="Hapus Transaksi"
-        description={
-          toDelete
-            ? `Hapus transaksi ${toDelete.menu} (${toDelete.mitra_name}) tanggal ${toDelete.date}?`
-            : ""
-        }
+        description={toDelete
+          ? `Hapus transaksi ${toDelete.menu} (${toDelete.mitra_name}) tanggal ${toDelete.date}?`
+          : ""}
         onConfirm={async () => {
           if (toDelete) await onDelete(toDelete.id);
           setToDelete(null);
@@ -341,9 +391,7 @@ function DetailRow({ label, value, strong, highlight, muted }) {
           highlight ? "text-emerald-600 font-semibold" : "text-slate-800",
           muted ? "text-slate-500 font-normal text-xs" : "",
         ].join(" ")}
-      >
-        {value}
-      </span>
+      >{value}</span>
     </div>
   );
 }
