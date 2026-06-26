@@ -748,7 +748,12 @@ app.include_router(api)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    # allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    allow_origins=[
+        "https://dapur-cece-profit-calculator.vercel.app",  # URL Vercel kamu
+        "http://localhost:3000",     # untuk dev lokal
+        "http://localhost:5173",     # Vite dev server
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
