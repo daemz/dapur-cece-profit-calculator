@@ -52,7 +52,11 @@ export default function TransactionsPage() {
     }
   };
 
-  useEffect(() => { load(); }, [filterDate, filterCabang]);
+  useEffect(() => {
+    load();
+
+    // eslint-disable-next-line
+  }, [filterDate, filterCabang]);
 
   // Reset form on open: always default date to today
   const openCreate = () => {
