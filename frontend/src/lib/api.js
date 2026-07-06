@@ -76,10 +76,12 @@ export function formatDateID(d) {
   });
 }
 
+// Use local timezone (typically Asia/Jakarta for this app) so the default
+// date matches the user's business day, not UTC.
 export function todayStr() {
   const d = new Date();
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }

@@ -86,47 +86,47 @@ export default function Dashboard() {
   const metrics = data?.metrics || { total_sales: 0, total_profit: 0, total_items: 0, mitra_count: 0 };
 
   return (
-    <div className="space-y-8" data-testid="dashboard-page">
+     <div className="space-y-6 sm:space-y-8" data-testid="dashboard-page">
       {/* Cabang selector */}
-      <div className="flex items-center justify-between gap-3 flex-wrap no-print">
+      <div className="flex items-center gap-2 sm:gap-3 flex-wrap no-print">
         <div className="flex items-center gap-2">
           <Building2 size={16} className="text-red-600" />
-          <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
+          <span className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
             Cabang
           </span>
-          <Select value={selectedCabang} onValueChange={setSelectedCabang}>
-            <SelectTrigger className="w-60" data-testid="dashboard-cabang-select">
-              <SelectValue placeholder="Semua Cabang" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL} data-testid="dashboard-cabang-all">Semua Cabang</SelectItem>
-              {cabangs.map((c) => (
-                <SelectItem key={c.id} value={c.id} data-testid={`dashboard-cabang-${c.id}`}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
+        <Select value={selectedCabang} onValueChange={setSelectedCabang}>
+          <SelectTrigger className="w-60" data-testid="dashboard-cabang-select">
+            <SelectValue placeholder="Semua Cabang" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL} data-testid="dashboard-cabang-all">Semua Cabang</SelectItem>
+            {cabangs.map((c) => (
+              <SelectItem key={c.id} value={c.id} data-testid={`dashboard-cabang-${c.id}`}>
+                {c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
         <MetricCard icon={Wallet} label="Pendapatan Hari Ini" value={formatRupiah(metrics.total_sales)} testId="metric-sales" accent />
         <MetricCard icon={TrendingUp} label="Profit Hari Ini" value={formatRupiah(metrics.total_profit)} testId="metric-profit" />
         <MetricCard icon={Package} label="Item Terjual" value={metrics.total_items} testId="metric-items" />
         <MetricCard icon={Store} label="Mitra Terdaftar" value={metrics.mitra_count} testId="metric-mitra" />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 no-print">
-        <h2 className="font-heading text-2xl font-semibold tracking-tight text-slate-900">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 no-print">
+        <h2 className="font-heading text-xl sm:text-2xl font-semibold tracking-tight text-slate-900">
           Kartu Mitra Hari Ini
         </h2>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => exportDashboardPDF(data)}
-            className="border-slate-300" data-testid="export-pdf-button">
+            className="border-slate-300 flex-1 sm:flex-none" data-testid="export-pdf-button">
             <Download size={16} className="mr-2" /> Export PDF
           </Button>
-          <Button onClick={printAll} className="bg-red-600 hover:bg-red-700 text-white" data-testid="print-receipt-button">
+          <Button onClick={printAll} className="bg-red-600 hover:bg-red-700 text-white flex-1 sm:flex-none" data-testid="print-receipt-button">
             <Printer size={16} className="mr-2" /> Cetak Struk
           </Button>
         </div>
@@ -156,20 +156,20 @@ export default function Dashboard() {
       )}
 
       <Card className="border-slate-200" data-testid="sales-chart-card">
-        <CardHeader className="flex flex-row items-center justify-between pb-4">
-          <CardTitle className="font-heading text-xl font-semibold tracking-tight">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4">
+          <CardTitle className="font-heading text-lg sm:text-xl font-semibold tracking-tight">
             Grafik Penjualan
           </CardTitle>
           <Tabs value={period} onValueChange={setPeriod}>
-            <TabsList className="bg-slate-100">
-              <TabsTrigger value="daily" data-testid="chart-period-daily">Harian</TabsTrigger>
-              <TabsTrigger value="weekly" data-testid="chart-period-weekly">Mingguan</TabsTrigger>
-              <TabsTrigger value="monthly" data-testid="chart-period-monthly">Bulanan</TabsTrigger>
+            <TabsList className="bg-slate-100 w-full sm:w-auto">
+              <TabsTrigger value="daily" className="flex-1 sm:flex-none" data-testid="chart-period-daily">Harian</TabsTrigger>
+              <TabsTrigger value="weekly" className="flex-1 sm:flex-none" data-testid="chart-period-weekly">Mingguan</TabsTrigger>
+              <TabsTrigger value="monthly" className="flex-1 sm:flex-none" data-testid="chart-period-monthly">Bulanan</TabsTrigger>
             </TabsList>
           </Tabs>
         </CardHeader>
         <CardContent>
-          <div className="h-72 w-full">
+          <div className="h-60 sm:h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
               {period === "daily" ? (
                 <BarChart data={chart?.series || []}>
@@ -209,18 +209,18 @@ export default function Dashboard() {
 function MetricCard({ icon: Icon, label, value, testId, accent }) {
   return (
     <Card className={`border-slate-200 ${accent ? "bg-red-600 border-red-600 text-white" : "bg-white"}`} data-testid={testId}>
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <div className={`text-xs font-bold uppercase tracking-[0.18em] ${accent ? "text-red-100" : "text-slate-500"}`}>
+      <CardContent className="p-4 sm:p-6">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className={`text-[10px] sm:text-xs font-bold uppercase tracking-[0.18em] ${accent ? "text-red-100" : "text-slate-500"}`}>
               {label}
             </div>
-            <div className={`font-heading text-2xl md:text-3xl font-bold mt-3 ${accent ? "text-white" : "text-slate-900"}`}>
+            <div className={`font-heading text-lg sm:text-2xl md:text-3xl font-bold mt-2 sm:mt-3 truncate ${accent ? "text-white" : "text-slate-900"}`}>
               {value}
             </div>
           </div>
-          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${accent ? "bg-white/15" : "bg-red-50"}`}>
-            <Icon size={20} className={accent ? "text-white" : "text-red-600"} strokeWidth={2.2} />
+          <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0 ${accent ? "bg-white/15" : "bg-red-50"}`}>
+            <Icon size={18} className={accent ? "text-white" : "text-red-600"} strokeWidth={2.2} />
           </div>
         </div>
       </CardContent>

@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration-4: tested new bulk transactions endpoint + responsive mobile/tablet/desktop layouts. Backend: 31/31 pytest passing (added 7 new TestBulkTransactions cases). Frontend: verified viewport-based sidebar switching, metric grid columns, new Cabang→Mitra→Products bulk dialog flow with client-side stock validation.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Layout mobile Sheet sidebar", "issues": ["Accessibility: SheetContent is missing SheetTitle/SheetDescription — Radix logs console error: 'DialogContent requires a DialogTitle for the component to be accessible for screen reader users.' Consider adding a VisuallyHidden SheetTitle inside SheetContent."]},
+      {"screen": "Dashboard chart", "issues": ["(carry-over) Recharts logs 'width(-1) and height(-1)' warnings on initial render — cosmetic only."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_umkm_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(minor a11y) Add a VisuallyHidden <SheetTitle>Menu</SheetTitle> inside SheetContent in /app/frontend/src/components/Layout.jsx to silence Radix DialogTitle warning on mobile sidebar.",
+    "(carry-over) CORS_ORIGINS='*' with allow_credentials=True is spec-invalid — set explicit origins for prod."
+  ],
+  "critical_code_review_comments": [
+    "POST /api/transactions/bulk correctly implements all-or-nothing validation: pre-loads products + aggregates already-sold-today in a single pipeline, validates every item, and raises 400 with '|'-joined per-product Indonesian messages before any insert. Verified with test_bulk_all_or_nothing_on_stock_exceed: even a valid first item is NOT inserted when a later item exceeds stock.",
+    "Bulk endpoint filters items with jumlah_terjual==0 BEFORE validation (line 525). Confirmed: empty items OR all-zero items → 400 with 'Tidak ada item dengan jumlah > 0'. Mixed [qty=4, qty=0] → count=1 (zero silently filtered).",
+    "Derived fields (cabang_id/cabang_name/mitra_name/harga_mitra/harga_jual/total_pendapatan/profit) are read from product doc, so tampering with client payload cannot alter pricing. ✓",
+    "Existing single POST /api/transactions endpoint remains untouched → backward compat verified.",
+    "Frontend Transactions.jsx: qtyMap clears correctly on cabang change AND on mitra change (line 276, 294). validationError memo re-evaluates when soldMap/qtyMap change and disables save. Client 'max' attribute is set to remaining stock — server double-checks. Good defense-in-depth.",
+    "Layout.jsx correctly uses hidden lg:flex on desktop sidebar and lg:hidden on mobile-menu-trigger — verified via computed styles at 390/820/1440. Sheet has data-testid='mobile-sidebar' as required.",
+    "Dashboard metric grid: grid-cols-2 lg:grid-cols-4 — computed 2 cols on 390px, 4 cols on 1440px. ✓",
+    "todayStr() in api.js is UTC-based, but current backend TZ Asia/Jakarta (UTC+7) — during 00:00-07:00 WIB the frontend's default 'today' would be YESTERDAY. Not observed at test time (04:45 UTC = 11:45 WIB, both same day). Consider using local timezone in todayStr() to prevent edge-case."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_umkm_api.py (added TestBulkTransactions class with 7 tests: happy-path field derivation, empty→400, all-zero→400, zero-filtered, all-or-nothing on overstock, respects already-sold-today, backward-compat single POST)"
+  ],
+  "success_rate": {
+    "backend": "100% (31/31 pytest)",
+    "frontend": "100% — responsive layout at 390/820/1440 all correct; bulk dialog flow (Cabang→Mitra→products list→qty input→overstock validation with red border + disabled save) verified end-to-end on live preview URL; date defaults to today (2026-07-06)."
+  },
+  "test_credentials": "admin@sarapan.id / admin123",
+  "seed_data_creation": "Tests create TEST_-prefixed Cabang/Mitra/Products; cleaned up via API. Note: an existing 'Burger' transaction (qty=4) exists from prior tester and was left in place per instructions to be resetting-safe.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: pytest /app/backend/tests/test_umkm_api.py -v (31 tests). Bulk endpoint tests are in TestBulkTransactions class. Frontend responsive testing: viewport 390x800 or 820x1180 → mobile-menu-trigger visible + desktop aside display:none; 1440x900 → opposite. Dashboard metric grid uses grid-cols-2 lg:grid-cols-4. New Transactions bulk dialog: tx-cabang-select → tx-mitra-select → tx-bulk-product-list with tx-bulk-row-{pid} and tx-bulk-qty-{pid} inputs. Save disabled when total=0 or validationError. Note that only 'St. Sudimara' cabang has seeded mitras currently.",
+  "rca of the issue": "N/A — no bugs found in iteration-4 features."
+}
+

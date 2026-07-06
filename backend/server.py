@@ -159,6 +159,15 @@ class TransactionIn(BaseModel):
     jumlah_terjual: int = Field(ge=0)
     date: Optional[str] = None
 
+class BulkTransactionItem(BaseModel):
+    product_id: str
+    jumlah_terjual: int = Field(ge=0)
+
+
+class BulkTransactionIn(BaseModel):
+    date: Optional[str] = None
+    items: List[BulkTransactionItem]
+
 
 class Transaction(BaseModel):
     id: str
@@ -506,6 +515,70 @@ async def list_transactions(
         q["cabang_id"] = cabang_id
     items = await db.transactions.find(q, {"_id": 0}).sort("created_at", -1).to_list(5000)
     return items
+
+@api.post(\"/transactions/bulk\")
+async def create_transactions_bulk(payload: BulkTransactionIn, user=Depends(get_current_user)):
+    date = payload.date or today_str()
+    # Filter items with qty > 0
+    valid_items = [it for it in payload.items if it.jumlah_terjual > 0]
+    if not valid_items:
+        raise HTTPException(status_code=400, detail=\"Tidak ada item dengan jumlah > 0\")
+
+    # Load products
+    product_ids = list({it.product_id for it in valid_items})
+    products = await db.products.find({\"id\": {\"$in\": product_ids}}, {\"_id\": 0}).to_list(1000)
+    products_by_id = {p[\"id\"]: p for p in products}
+
+    # Pre-load already-sold today per product
+    pipeline = [
+        {\"$match\": {\"product_id\": {\"$in\": product_ids}, \"date\": date}},
+        {\"$group\": {\"_id\": \"$product_id\", \"sold\": {\"$sum\": \"$jumlah_terjual\"}}},
+    ]
+    sold_agg = await db.transactions.aggregate(pipeline).to_list(1000)
+    sold_map = {r[\"_id\"]: r[\"sold\"] for r in sold_agg}
+
+    # Validate all first (all-or-nothing)
+    errors = []
+    for it in valid_items:
+        product = products_by_id.get(it.product_id)
+        if not product:
+            errors.append(f\"Produk tidak ditemukan: {it.product_id}\")
+            continue
+        already_sold = sold_map.get(it.product_id, 0)
+        remaining = product[\"jumlah\"] - already_sold
+        if it.jumlah_terjual > remaining:
+            errors.append(
+                f\"{product['menu']}: jumlah {it.jumlah_terjual} melebihi sisa stok {remaining} \"
+                f\"(titipan {product['jumlah']}, terjual {already_sold})\"
+            )
+    if errors:
+        raise HTTPException(status_code=400, detail=\" | \".join(errors))
+
+    # Insert all
+    docs = []
+    for it in valid_items:
+        product = products_by_id[it.product_id]
+        total_pendapatan = product[\"harga_jual\"] * it.jumlah_terjual
+        profit = (product[\"harga_jual\"] - product[\"harga_mitra\"]) * it.jumlah_terjual
+        docs.append({
+            \"id\": str(uuid.uuid4()),
+            \"product_id\": product[\"id\"],
+            \"mitra_id\": product[\"mitra_id\"],
+            \"mitra_name\": product[\"mitra_name\"],
+            \"cabang_id\": product[\"cabang_id\"],
+            \"cabang_name\": product[\"cabang_name\"],
+            \"menu\": product[\"menu\"],
+            \"jumlah_terjual\": it.jumlah_terjual,
+            \"harga_mitra\": product[\"harga_mitra\"],
+            \"harga_jual\": product[\"harga_jual\"],
+            \"total_pendapatan\": total_pendapatan,
+            \"profit\": profit,
+            \"date\": date,
+            \"created_at\": now_iso(),
+        })
+    if docs:
+        await db.transactions.insert_many(docs)
+    return {\"ok\": True, \"count\": len(docs)}
 
 
 @api.delete("/transactions/{tx_id}")
