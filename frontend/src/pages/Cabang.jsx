@@ -69,12 +69,12 @@ export default function CabangPage() {
   return (
     <div className="space-y-6">
       <Card className="border-slate-200">
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <CardTitle className="font-heading text-xl font-semibold tracking-tight">
             Daftar Cabang
           </CardTitle>
           <Button
-            className="bg-red-600 hover:bg-red-700 text-white"
+            className="bg-red-600 hover:bg-red-700 text-white w-full sm:w-auto"
             onClick={openCreate}
             data-testid="add-cabang-button"
           >
@@ -88,41 +88,43 @@ export default function CabangPage() {
               <p className="text-sm text-slate-500 mt-3">Belum ada cabang.</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nama Cabang</TableHead>
-                  <TableHead>Tanggal Daftar</TableHead>
-                  <TableHead className="text-right">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.map((c) => (
-                  <TableRow key={c.id} data-testid={`cabang-row-${c.id}`}>
-                    <TableCell className="font-medium">{c.name}</TableCell>
-                    <TableCell className="text-slate-500 text-sm">
-                      {new Date(c.created_at).toLocaleDateString("id-ID")}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="inline-flex gap-1">
-                        <Button
-                          variant="ghost" size="sm" onClick={() => openEdit(c)}
-                          className="text-slate-600 hover:text-red-600 hover:bg-red-50"
-                          data-testid={`edit-cabang-${c.id}`}
-                          title="Edit"
-                        ><Pencil size={16} /></Button>
-                        <Button
-                          variant="ghost" size="sm" onClick={() => setToDelete(c)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          data-testid={`delete-cabang-${c.id}`}
-                          title="Hapus"
-                        ><Trash2 size={16} /></Button>
-                      </div>
-                    </TableCell>
+            <div className="overflow-x-auto -mx-4 sm:mx-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nama Cabang</TableHead>
+                    <TableHead className="whitespace-nowrap">Tanggal Daftar</TableHead>
+                    <TableHead className="text-right">Aksi</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {items.map((c) => (
+                    <TableRow key={c.id} data-testid={`cabang-row-${c.id}`}>
+                      <TableCell className="font-medium">{c.name}</TableCell>
+                      <TableCell className="text-slate-500 text-sm whitespace-nowrap">
+                        {new Date(c.created_at).toLocaleDateString("id-ID")}
+                      </TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        <div className="inline-flex gap-1">
+                          <Button
+                            variant="ghost" size="sm" onClick={() => openEdit(c)}
+                            className="text-slate-600 hover:text-red-600 hover:bg-red-50"
+                            data-testid={`edit-cabang-${c.id}`}
+                            title="Edit"
+                          ><Pencil size={16} /></Button>
+                          <Button
+                            variant="ghost" size="sm" onClick={() => setToDelete(c)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            data-testid={`delete-cabang-${c.id}`}
+                            title="Hapus"
+                          ><Trash2 size={16} /></Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

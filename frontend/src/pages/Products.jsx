@@ -126,7 +126,7 @@ export default function ProductsPage() {
   return (
     <div className="space-y-6">
       <Card className="border-slate-200">
-        <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-3">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <CardTitle className="font-heading text-xl font-semibold tracking-tight">
               Daftar Produk (New Item)
@@ -135,9 +135,9 @@ export default function ProductsPage() {
               Stok titipan direset otomatis setiap pukul 23:59 (basis harian).
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Select value={filterCabang} onValueChange={setFilterCabang}>
-              <SelectTrigger className="w-52" data-testid="filter-cabang-products">
+              <SelectTrigger className="w-full sm:w-52" data-testid="filter-cabang-products">
                 <SelectValue placeholder="Semua Cabang" />
               </SelectTrigger>
               <SelectContent>
@@ -148,7 +148,7 @@ export default function ProductsPage() {
               </SelectContent>
             </Select>
             <Button
-              className="bg-red-600 hover:bg-red-700 text-white"
+              className="bg-red-600 hover:bg-red-700 text-white w-full sm:w-auto"
               onClick={openCreate}
               disabled={mitras.length === 0}
               data-testid="add-product-button"
@@ -177,53 +177,55 @@ export default function ProductsPage() {
                     </h3>
                     <span className="text-xs text-slate-400">({group.items.length} produk)</span>
                   </div>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Mitra</TableHead>
-                        <TableHead>Menu</TableHead>
-                        <TableHead className="text-right">Stok Hari Ini</TableHead>
-                        <TableHead className="text-right">Harga Mitra</TableHead>
-                        <TableHead className="text-right">Harga Jual</TableHead>
-                        <TableHead className="text-right">Profit/Item</TableHead>
-                        <TableHead className="text-right">Aksi</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {group.items.map((p) => (
-                        <TableRow key={p.id} data-testid={`product-row-${p.id}`}>
-                          <TableCell className="font-medium">{p.mitra_name}</TableCell>
-                          <TableCell>{p.menu}</TableCell>
-                          <TableCell className="text-right">
-                            <span className={p.jumlah === 0 ? "text-slate-400" : "text-slate-900 font-medium"}>
-                              {p.jumlah}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right text-slate-600">{formatRupiah(p.harga_mitra)}</TableCell>
-                          <TableCell className="text-right text-slate-900 font-medium">{formatRupiah(p.harga_jual)}</TableCell>
-                          <TableCell className="text-right text-emerald-600 font-medium">
-                            {formatRupiah(p.harga_jual - p.harga_mitra)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="inline-flex gap-1">
-                              <Button
-                                variant="ghost" size="sm" onClick={() => openEdit(p)}
-                                className="text-slate-600 hover:text-red-600 hover:bg-red-50"
-                                data-testid={`edit-product-${p.id}`}
-                                title="Edit"
-                              ><Pencil size={16} /></Button>
-                              <Button
-                                variant="ghost" size="sm" onClick={() => setToDelete(p)}
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                data-testid={`delete-product-${p.id}`}
-                                title="Hapus"
-                              ><Trash2 size={16} /></Button>
-                            </div>
-                          </TableCell>
+                  <div className="overflow-x-auto -mx-4 sm:mx-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="whitespace-nowrap">Mitra</TableHead>
+                          <TableHead className="whitespace-nowrap">Menu</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Stok Hari Ini</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Harga Mitra</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Harga Jual</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Profit/Item</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Aksi</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {group.items.map((p) => (
+                          <TableRow key={p.id} data-testid={`product-row-${p.id}`}>
+                              <TableCell className="font-medium whitespace-nowrap">{p.mitra_name}</TableCell>
+                              <TableCell className="whitespace-nowrap">{p.menu}</TableCell>
+                              <TableCell className="text-right whitespace-nowrap">
+                              <span className={p.jumlah === 0 ? "text-slate-400" : "text-slate-900 font-medium"}>
+                                {p.jumlah}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right text-slate-600 whitespace-nowrap">{formatRupiah(p.harga_mitra)}</TableCell>
+                            <TableCell className="text-right text-slate-900 font-medium whitespace-nowrap">{formatRupiah(p.harga_jual)}</TableCell>
+                            <TableCell className="text-right text-emerald-600 font-medium whitespace-nowrap">
+                              {formatRupiah(p.harga_jual - p.harga_mitra)}
+                            </TableCell>
+                            <TableCell className="text-right whitespace-nowrap">
+                              <div className="inline-flex gap-1">
+                                <Button
+                                  variant="ghost" size="sm" onClick={() => openEdit(p)}
+                                  className="text-slate-600 hover:text-red-600 hover:bg-red-50"
+                                  data-testid={`edit-product-${p.id}`}
+                                  title="Edit"
+                                ><Pencil size={16} /></Button>
+                                <Button
+                                  variant="ghost" size="sm" onClick={() => setToDelete(p)}
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  data-testid={`delete-product-${p.id}`}
+                                  title="Hapus"
+                                ><Trash2 size={16} /></Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
               ))}
             </div>

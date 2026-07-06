@@ -104,13 +104,13 @@ export default function MitraPage() {
   return (
     <div className="space-y-6">
       <Card className="border-slate-200">
-        <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-3">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <CardTitle className="font-heading text-xl font-semibold tracking-tight">
             Daftar Mitra
           </CardTitle>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Select value={filterCabang} onValueChange={setFilterCabang}>
-              <SelectTrigger className="w-52" data-testid="filter-cabang-mitra">
+              <SelectTrigger className="w-full sm:w-52" data-testid="filter-cabang-mitra">
                 <SelectValue placeholder="Semua Cabang" />
               </SelectTrigger>
               <SelectContent>
@@ -123,7 +123,7 @@ export default function MitraPage() {
               </SelectContent>
             </Select>
             <Button
-              className="bg-red-600 hover:bg-red-700 text-white"
+              className="bg-red-600 hover:bg-red-700 text-white w-full sm:w-auto"
               onClick={openCreate}
               disabled={cabangs.length === 0}
               data-testid="add-mitra-button"
@@ -154,41 +154,43 @@ export default function MitraPage() {
                     </h3>
                     <span className="text-xs text-slate-400">({group.items.length} mitra)</span>
                   </div>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Nama Mitra</TableHead>
-                        <TableHead>Tanggal Daftar</TableHead>
-                        <TableHead className="text-right">Aksi</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {group.items.map((m) => (
-                        <TableRow key={m.id} data-testid={`mitra-row-${m.id}`}>
-                          <TableCell className="font-medium">{m.name}</TableCell>
-                          <TableCell className="text-slate-500 text-sm">
-                            {new Date(m.created_at).toLocaleDateString("id-ID")}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="inline-flex gap-1">
-                              <Button
-                                variant="ghost" size="sm" onClick={() => openEdit(m)}
-                                className="text-slate-600 hover:text-red-600 hover:bg-red-50"
-                                data-testid={`edit-mitra-${m.id}`}
-                                title="Edit"
-                              ><Pencil size={16} /></Button>
-                              <Button
-                                variant="ghost" size="sm" onClick={() => setToDelete(m)}
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                data-testid={`delete-mitra-${m.id}`}
-                                title="Hapus"
-                              ><Trash2 size={16} /></Button>
-                            </div>
-                          </TableCell>
+                  <div className="overflow-x-auto -mx-4 sm:mx-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nama Mitra</TableHead>
+                          <TableHead className="whitespace-nowrap">Tanggal Daftar</TableHead>
+                          <TableHead className="text-right">Aksi</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {group.items.map((m) => (
+                          <TableRow key={m.id} data-testid={`mitra-row-${m.id}`}>
+                            <TableCell className="font-medium">{m.name}</TableCell>
+                            <TableCell className="text-slate-500 text-sm whitespace-nowrap">
+                              {new Date(m.created_at).toLocaleDateString("id-ID")}
+                            </TableCell>
+                            <TableCell className="text-right whitespace-nowrap">
+                              <div className="inline-flex gap-1">
+                                <Button
+                                  variant="ghost" size="sm" onClick={() => openEdit(m)}
+                                  className="text-slate-600 hover:text-red-600 hover:bg-red-50"
+                                  data-testid={`edit-mitra-${m.id}`}
+                                  title="Edit"
+                                ><Pencil size={16} /></Button>
+                                <Button
+                                  variant="ghost" size="sm" onClick={() => setToDelete(m)}
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  data-testid={`delete-mitra-${m.id}`}
+                                  title="Hapus"
+                                ><Trash2 size={16} /></Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
               ))}
             </div>
