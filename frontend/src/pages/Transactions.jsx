@@ -55,7 +55,10 @@ export default function TransactionsPage() {
     }
   };
 
-  useEffect(() => { load(); }, [filterDate, filterCabang]);
+  useEffect(() => { 
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterDate, filterCabang]);
 
   const openCreate = () => {
     const cabangDefault = filterCabang !== ALL ? filterCabang : (cabangs[0]?.id || "");
@@ -104,6 +107,7 @@ export default function TransactionsPage() {
       }
     }
     return null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productsForForm, qtyMap, soldMap]);
 
   const onSubmit = async (e) => {
