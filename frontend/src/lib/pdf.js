@@ -3,12 +3,15 @@ import autoTable from "jspdf-autotable";
 import { formatRupiah } from "@/lib/api";
 import { toast } from "sonner";
 
-function openPdfBlob(doc, filename) {
+/**
+ * Save + open PDF in a way compatible with iframe/sandbox environments.
+ * Returns the Blob and blob URL so the caller can also share it (e.g., WhatsApp).
+ */
+function openPdfBlob(doc, filename, { silent = false } = {}) {
   try {
     const blob = doc.output("blob");
     const url = URL.createObjectURL(blob);
 
-    // Try standard download via a temporary anchor element
     const a = document.createElement("a");
     a.href = url;
     a.download = filename;
@@ -18,39 +21,39 @@ function openPdfBlob(doc, filename) {
     a.click();
     setTimeout(() => {
       document.body.removeChild(a);
-      // Keep URL alive briefly so the new tab can render
       setTimeout(() => URL.revokeObjectURL(url), 30_000);
     }, 50);
 
-    // Also open in a new tab as a fallback for sandboxed iframes where
-    // download attribute is ignored. Opening the blob URL allows the user
-    // to view and save the PDF manually.
     try {
       const win = window.open(url, "_blank", "noopener,noreferrer");
-      if (!win) {
+      if (!win && !silent) {
         toast.info("Tab baru diblokir. Aktifkan pop-up untuk membuka PDF.");
       }
     } catch (_e) {
       // ignore
     }
 
-    toast.success("PDF berhasil dibuat");
+    if (!silent) toast.success("PDF berhasil dibuat");
+    return { blob, url, filename };
   } catch (e) {
     console.error(e);
-    toast.error("Gagal membuat PDF: " + (e?.message || "unknown"));
+    if (!silent) toast.error("Gagal membuat PDF: " + (e?.message || "unknown"));
+    return null;
   }
 }
 
 export function exportDashboardPDF(data) {
   if (!data) return;
   const doc = new jsPDF();
+
+  // Left-aligned header block
   doc.setFontSize(16);
-  doc.text("Laporan Penjualan Hari Ini", 14, 16);
+  doc.text("Laporan Penjualan Hari Ini", 14, 18);
   doc.setFontSize(10);
-  doc.text(`Tanggal: ${data.date}`, 14, 24);
-  doc.text(`Total Pendapatan: ${formatRupiah(data.metrics.total_sales)}`, 14, 30);
-  doc.text(`Total Profit: ${formatRupiah(data.metrics.total_profit)}`, 14, 36);
-  doc.text(`Total Item Terjual: ${data.metrics.total_items}`, 14, 42);
+  doc.text(`Tanggal: ${data.date}`, 14, 26);
+  doc.text(`Total Pendapatan: ${formatRupiah(data.metrics.total_sales)}`, 14, 32);
+  doc.text(`Total Profit: ${formatRupiah(data.metrics.total_profit)}`, 14, 38);
+  doc.text(`Total Item Terjual: ${data.metrics.total_items}`, 14, 44);
 
   const rows = [];
   data.mitra_cards.forEach((m) => {
@@ -58,7 +61,7 @@ export function exportDashboardPDF(data) {
       rows.push([
         m.mitra_name,
         it.menu,
-        it.jumlah_terjual,
+        String(it.jumlah_terjual),
         formatRupiah(it.harga_jual),
         formatRupiah(it.total_pendapatan),
         formatRupiah(it.profit),
@@ -67,25 +70,35 @@ export function exportDashboardPDF(data) {
   });
 
   autoTable(doc, {
-    startY: 50,
+    startY: 52,
     head: [["Mitra", "Menu", "Qty", "Harga Jual", "Pendapatan", "Profit"]],
     body: rows.length ? rows : [["-", "-", "-", "-", "-", "-"]],
-    styles: { fontSize: 9 },
-    headStyles: { fillColor: [220, 38, 38] },
+    styles: { fontSize: 9, halign: "left" },
+    headStyles: { fillColor: [220, 38, 38], halign: "left", textColor: [255, 255, 255] },
+    bodyStyles: { halign: "left" },
+    columnStyles: {
+      0: { halign: "left" },
+      1: { halign: "left" },
+      2: { halign: "left" },
+      3: { halign: "left" },
+      4: { halign: "left" },
+      5: { halign: "left" },
+    },
   });
 
-  openPdfBlob(doc, `laporan-${data.date}.pdf`);
+  return openPdfBlob(doc, `laporan-${data.date}.pdf`);
 }
 
 /**
  * Per-mitra PDF: only shows what the warung owes the mitra.
- * Does NOT include Harga Jual (selling price).
+ * Includes ALL products (even unsold ones show qty=0).
+ * All text is left-aligned. Does NOT include Harga Jual.
  */
-export function exportMitraPDF(mitraCard, date) {
-  if (!mitraCard) return;
+export function buildMitraPDF(mitraCard, date) {
+  if (!mitraCard) return null;
   const doc = new jsPDF();
 
-  // Header
+  // Header (all left-aligned)
   doc.setFontSize(16);
   doc.text("Rekap Setoran Mitra", 14, 18);
   doc.setFontSize(11);
@@ -93,11 +106,10 @@ export function exportMitraPDF(mitraCard, date) {
   doc.setFontSize(10);
   doc.text(`Tanggal: ${date}`, 14, 32);
 
-  // Body table — NO Harga Jual; only mitra-facing data
   const rows = mitraCard.items.map((it) => [
     it.menu,
     formatRupiah(it.harga_mitra),
-    it.jumlah_terjual,
+    String(it.jumlah_terjual),
     formatRupiah(it.harga_mitra * it.jumlah_terjual),
   ]);
 
@@ -106,19 +118,21 @@ export function exportMitraPDF(mitraCard, date) {
     head: [["Produk", "Harga Produk", "Jumlah Terjual", "Total"]],
     body: rows.length ? rows : [["-", "-", "-", "-"]],
     styles: { fontSize: 10, halign: "left" },
-    headStyles: { fillColor: [220, 38, 38], halign: "left" },
+    headStyles: { fillColor: [220, 38, 38], halign: "left", textColor: [255, 255, 255] },
+    bodyStyles: { halign: "left" },
     columnStyles: {
-      1: { halign: "right" },
-      2: { halign: "right" },
-      3: { halign: "right", fontStyle: "bold" },
+      0: { halign: "left" },
+      1: { halign: "left" },
+      2: { halign: "left" },
+      3: { halign: "left", fontStyle: "bold" },
     },
     foot: [
       [
-        { content: "TOTAL DIBAYAR KE MITRA", colSpan: 3, styles: { halign: "right", fontStyle: "bold" } },
-        { content: formatRupiah(mitraCard.total_setoran), styles: { halign: "right", fontStyle: "bold" } },
+        { content: "TOTAL DIBAYAR KE MITRA", colSpan: 3, styles: { halign: "left", fontStyle: "bold" } },
+        { content: formatRupiah(mitraCard.total_setoran), styles: { halign: "left", fontStyle: "bold" } },
       ],
     ],
-    footStyles: { fillColor: [248, 250, 252], textColor: [15, 23, 42] },
+    footStyles: { fillColor: [248, 250, 252], textColor: [15, 23, 42], halign: "left" },
   });
 
   const finalY = doc.lastAutoTable.finalY || 60;
@@ -126,11 +140,16 @@ export function exportMitraPDF(mitraCard, date) {
   doc.setTextColor(100);
   doc.text(
     "Dokumen ini berisi rekap titipan dan setoran yang harus dibayarkan kepada mitra.",
-    14,
-    finalY + 14
+    14, finalY + 12
   );
-  doc.text("Terima kasih atas kerjasamanya.", 14, finalY + 20);
+  doc.text("Terima kasih atas kerjasamanya.", 14, finalY + 18);
 
   const safeName = String(mitraCard.mitra_name).replace(/[^a-zA-Z0-9-_]/g, "_");
-  openPdfBlob(doc, `rekap-${safeName}-${date}.pdf`);
+  return { doc, filename: `rekap-${safeName}-${date}.pdf` };
+}
+
+export function exportMitraPDF(mitraCard, date, opts = {}) {
+  const built = buildMitraPDF(mitraCard, date);
+  if (!built) return null;
+  return openPdfBlob(built.doc, built.filename, opts);
 }

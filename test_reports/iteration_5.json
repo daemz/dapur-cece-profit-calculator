@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration-5: verified WhatsApp / mitra-blast / unsold-in-PDF feature set. Backend: 37/37 pytest passing (added 5 new tests covering whatsapp_number CRUD, migration back-fill, dashboard unsold products enumeration + stok field, empty-products mitra). Frontend: verified end-to-end blast flow + individual WA send with popup URL inspection and PDF download.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard chart (carry-over)", "issues": ["Recharts logs 'width(-1) and height(-1)' warnings on initial render — cosmetic."]},
+      {"screen": "Layout mobile sidebar (carry-over)", "issues": ["SheetContent missing SheetTitle/Description — Radix a11y console error."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_umkm_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "POST/PUT /api/mitra correctly `.strip()` whatsapp_number and defaults to '' when Optional. Migration on startup back-fills whatsapp_number='' for existing docs (verified via test_all_existing_mitras_have_whatsapp_field). ✓",
+    "GET /api/dashboard/today rebuilt to enumerate products per mitra (products_by_mitra dict), so items array now includes unsold products with jumlah_terjual=0 and 'stok' field. Aggregates recomputed from product-level rows — verified numerically (Bu Ade: 6 Burgers sold → sales 54000, profit 6000; Hotdog+Sandwich contribute 0). ✓",
+    "Dashboard MitraCard uses items.filter(qty>0) for on-screen listing (Burger visible; Hotdog/Sandwich hidden) while PDF via buildMitraPDF renders all items (verified filename downloaded: rekap-Bu_Ade_Juleha-2026-07-06.pdf). ✓",
+    "sendReportToMitra: calls exportMitraPDF({silent:true}) then window.open(waLink). Observed 2 window.open calls: (1) blob URL for PDF, (2) https://wa.me/6281234567890?text=Halo%20kak%20Bu%20Ade%20Juleha%2C%20berikut%20rincian%20hasil%20penjualan%20hari%20ini%20ya! — exact format required. ✓",
+    "normalizeWaNumber('081234567890') → '6281234567890' verified. waLink builds https://wa.me/{p}?text={encodeURIComponent(msg)} correctly (comma encoded as %2C, space as %20, ! kept as literal — RFC-3986 allows). ✓",
+    "Blast modal correctly splits readyMitras (has WA + items.length>0) from notReadyMitras. In test env only Bu Ade Juleha qualifies (1 ready row; 'Belum ada nomor WhatsApp' section absent because all 10 other mitras have items.length===0 and are excluded from both sections). Verify E1 intended this or not — mitras with no products AND no WA are silently omitted from both lists.",
+    "PDF halign='left' applied consistently to headStyles/bodyStyles/footStyles/columnStyles in both exportDashboardPDF and buildMitraPDF. Per-mitra PDF columns: [Produk, Harga Produk, Jumlah Terjual, Total] — 'Harga Jual' correctly NOT included per requirement. ✓",
+    "Product 'Hotdog' has stok=0 and jumlah_terjual=0 in Bu Ade Juleha's card — daily reset via lazy _reset_products_if_stale() may have set jumlah=0. This is expected (products auto-reset each business day at 23:59 WIB).",
+    "(carry-over) CORS_ORIGINS='*' with allow_credentials=True is spec-invalid — set explicit origins for prod."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_umkm_api.py (added TestMitra.test_create_mitra_with_whatsapp_number, test_create_mitra_without_whatsapp_defaults_empty, test_update_mitra_whatsapp_number, test_all_existing_mitras_have_whatsapp_field; added TestDashboard.test_today_mitra_cards_include_unsold_products_and_stok, test_today_mitra_card_no_products_returns_empty_items)"
+  ],
+  "success_rate": {"backend": "100% (37/37 pytest)", "frontend": "100% — blast modal opens with 1 ready row + Kirim button; click triggers PDF download (rekap-Bu_Ade_Juleha-2026-07-06.pdf) + wa.me popup with correct phone (6281234567890) and message; card hides unsold items; Mitra page WA column + form input verified."},
+  "test_credentials": "admin@sarapan.id / admin123",
+  "seed_data_creation": "Tests create TEST_-prefixed data and clean up. Bu Ade Juleha existing seed unchanged.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: pytest /app/backend/tests/test_umkm_api.py -v (37 tests). Key new selectors: [data-testid=blast-report-button], [data-testid=blast-modal], [data-testid^=blast-row-], [data-testid^=blast-send-], [data-testid^=send-wa-], [data-testid=mitra-wa-input], [data-testid^=mitra-wa-]. Bu Ade Juleha is the only mitra with WA in seed; blast flow calls window.open twice (blob PDF + wa.me) — use page.evaluate to monkey-patch window.open and capture URLs rather than page.wait_for_event('popup') which only fires once."
+}

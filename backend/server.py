@@ -122,6 +122,7 @@ class Cabang(BaseModel):
 class MitraIn(BaseModel):
     name: str
     cabang_id: str
+    whatsapp_number: Optional[str] = ""
 
 
 class Mitra(BaseModel):
@@ -130,6 +131,7 @@ class Mitra(BaseModel):
     cabang_id: str
     cabang_name: str
     created_at: str
+    whatsapp_number: Optional[str] = ""
 
 
 class ProductIn(BaseModel):
@@ -337,6 +339,7 @@ async def create_mitra(payload: MitraIn, user=Depends(get_current_user)):
     doc = {
         "id": str(uuid.uuid4()), "name": payload.name,
         "cabang_id": cabang["id"], "cabang_name": cabang["name"],
+        "whatsapp_number": (payload.whatsapp_number or "").strip(),
         "created_at": now_iso(),
     }
     await db.mitra.insert_one(doc)
@@ -363,7 +366,8 @@ async def update_mitra(mitra_id: str, payload: MitraIn, user=Depends(get_current
     })
     if dup:
         raise HTTPException(status_code=400, detail="Nama mitra sudah dipakai di cabang ini")
-    update = {"name": payload.name, "cabang_id": cabang["id"], "cabang_name": cabang["name"]}
+    update = {"name": payload.name, "cabang_id": cabang["id"], "cabang_name": cabang["name"],
+              "whatsapp_number": (payload.whatsapp_number or "").strip()}
     await db.mitra.update_one({"id": mitra_id}, {"$set": update})
     await db.products.update_many(
         {"mitra_id": mitra_id},
@@ -605,29 +609,51 @@ async def dashboard_today(cabang_id: Optional[str] = None, user=Depends(get_curr
     total_items = sum(t["jumlah_terjual"] for t in txs)
     cabangs_in_view = await db.cabang.find(cab_q, {"_id": 0}).sort("name", 1).to_list(1000)
 
+    # Load all products for these mitras (used to include unsold items in cards)
+    mitra_ids = [m["id"] for m in mitras]
+    all_products = []
+    if mitra_ids:
+        all_products = await db.products.find(
+            {"mitra_id": {"$in": mitra_ids}}, {"_id": 0}
+        ).sort("menu", 1).to_list(5000)
+    products_by_mitra = {}
+    for p in all_products:
+        products_by_mitra.setdefault(p["mitra_id"], []).append(p)
+
     cards = []
     for m in mitras:
+        products_of_m = products_by_mitra.get(m["id"], [])
         m_txs = [t for t in txs if t["mitra_id"] == m["id"]]
         items = []
         m_sales = 0.0
         m_profit = 0.0
         m_setoran = 0.0
         m_count = 0
-        for t in m_txs:
-            setoran = t["harga_mitra"] * t["jumlah_terjual"]
+        # Enumerate every product (including unsold ones with jumlah_terjual=0)
+        for p in products_of_m:
+            p_txs = [t for t in m_txs if t["product_id"] == p["id"]]
+            qty = sum(t["jumlah_terjual"] for t in p_txs)
+            setoran = p["harga_mitra"] * qty
+            total_pendapatan = p["harga_jual"] * qty
+            profit = (p["harga_jual"] - p["harga_mitra"]) * qty
             items.append({
-                "menu": t["menu"], "jumlah_terjual": t["jumlah_terjual"],
-                "harga_mitra": t["harga_mitra"], "harga_jual": t["harga_jual"],
+                "menu": p["menu"],
+                "jumlah_terjual": qty,
+                "stok": p["jumlah"],
+                "harga_mitra": p["harga_mitra"],
+                "harga_jual": p["harga_jual"],
                 "setoran_mitra": setoran,
-                "total_pendapatan": t["total_pendapatan"], "profit": t["profit"],
+                "total_pendapatan": total_pendapatan,
+                "profit": profit,
             })
-            m_sales += t["total_pendapatan"]
-            m_profit += t["profit"]
+            m_sales += total_pendapatan
+            m_profit += profit
             m_setoran += setoran
-            m_count += t["jumlah_terjual"]
+            m_count += qty
         cards.append({
             "mitra_id": m["id"], "mitra_name": m["name"],
             "cabang_id": m["cabang_id"], "cabang_name": m["cabang_name"],
+            "whatsapp_number": m.get("whatsapp_number", ""),
             "items": items,
             "total_sales": m_sales, "total_profit": m_profit,
             "total_setoran": m_setoran, "total_items": m_count,
@@ -738,13 +764,6 @@ async def reset_all_products_daily():
 
 async def _migrate_legacy_documents():
     """Ensure all existing mitra/product/transaction docs have cabang fields."""
-    needs_migration = (
-        await db.mitra.find_one({"cabang_id": {"$exists": False}})
-        or await db.products.find_one({"cabang_id": {"$exists": False}})
-        or await db.transactions.find_one({"cabang_id": {"$exists": False}})
-    )
-    if not needs_migration:
-        return
     default_cabang = await get_or_create_default_cabang()
     update = {"cabang_id": default_cabang["id"], "cabang_name": default_cabang["name"]}
     await db.mitra.update_many({"cabang_id": {"$exists": False}}, {"$set": update})
@@ -753,6 +772,10 @@ async def _migrate_legacy_documents():
     await db.products.update_many(
         {"last_reset_date": {"$exists": False}},
         {"$set": {"last_reset_date": today_str()}},
+    )
+    # Add whatsapp_number field for existing mitras
+    await db.mitra.update_many(
+        {"whatsapp_number": {"$exists": False}}, {"$set": {"whatsapp_number": ""}}
     )
 
 

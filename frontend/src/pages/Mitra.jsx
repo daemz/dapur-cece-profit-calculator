@@ -25,7 +25,7 @@ export default function MitraPage() {
   const [filterCabang, setFilterCabang] = useState(ALL);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ name: "", cabang_id: "" });
+  const [form, setForm] = useState({ name: "", cabang_id: "", whatsapp_number: "" });
   const [toDelete, setToDelete] = useState(null);
 
   const load = async () => {
@@ -59,13 +59,18 @@ export default function MitraPage() {
     setForm({
       name: "",
       cabang_id: filterCabang !== ALL ? filterCabang : (cabangs[0]?.id || ""),
+      whatsapp_number: "",
     });
     setOpen(true);
   };
 
   const openEdit = (m) => {
     setEditing(m);
-    setForm({ name: m.name, cabang_id: m.cabang_id });
+    setForm({
+      name: m.name,
+      cabang_id: m.cabang_id,
+      whatsapp_number: m.whatsapp_number || "",
+    });
     setOpen(true);
   };
 
@@ -75,7 +80,11 @@ export default function MitraPage() {
     if (!trimmed) return;
     if (!form.cabang_id) return toast.error("Pilih cabang terlebih dahulu");
     try {
-      const payload = { name: trimmed, cabang_id: form.cabang_id };
+      const payload = {
+        name: trimmed,
+        cabang_id: form.cabang_id,
+        whatsapp_number: (form.whatsapp_number || "").trim(),
+      };
       if (editing) {
         await api.put(`/mitra/${editing.id}`, payload);
         toast.success("Mitra diperbarui");
@@ -159,6 +168,7 @@ export default function MitraPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Nama Mitra</TableHead>
+                          <TableHead className="whitespace-nowrap">WhatsApp</TableHead>
                           <TableHead className="whitespace-nowrap">Tanggal Daftar</TableHead>
                           <TableHead className="text-right">Aksi</TableHead>
                         </TableRow>
@@ -167,6 +177,13 @@ export default function MitraPage() {
                         {group.items.map((m) => (
                           <TableRow key={m.id} data-testid={`mitra-row-${m.id}`}>
                             <TableCell className="font-medium">{m.name}</TableCell>
+                            <TableCell className="text-sm text-slate-600 whitespace-nowrap">
+                              {m.whatsapp_number ? (
+                                <span data-testid={`mitra-wa-${m.id}`}>{m.whatsapp_number}</span>
+                              ) : (
+                                <span className="text-slate-400 italic">—</span>
+                              )}
+                            </TableCell>
                             <TableCell className="text-slate-500 text-sm whitespace-nowrap">
                               {new Date(m.created_at).toLocaleDateString("id-ID")}
                             </TableCell>
@@ -237,6 +254,22 @@ export default function MitraPage() {
                 required
                 data-testid="mitra-name-input"
               />
+            </div>
+            <div>
+              <Label htmlFor="mitra-wa">Nomor WhatsApp</Label>
+              <Input
+                id="mitra-wa"
+                type="tel"
+                inputMode="tel"
+                value={form.whatsapp_number}
+                onChange={(e) => setForm({ ...form, whatsapp_number: e.target.value })}
+                placeholder="Contoh: 08123456789"
+                className="mt-1.5 focus-visible:ring-red-500/20 focus-visible:border-red-500"
+                data-testid="mitra-wa-input"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Opsional. Digunakan untuk kirim laporan penjualan.
+              </p>
             </div>
             <DialogFooter>
               <Button type="submit" className="bg-red-600 hover:bg-red-700" data-testid="mitra-save-button">

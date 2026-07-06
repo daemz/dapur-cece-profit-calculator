@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { api, formatRupiah } from "@/lib/api";
 import { exportDashboardPDF, exportMitraPDF } from "@/lib/pdf";
+import { waLink, buildMitraReportMessage, normalizeWaNumber } from "@/lib/whatsapp";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,16 +9,39 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
+import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
   CartesianGrid, LineChart, Line, Legend,
 } from "recharts";
 import {
-  TrendingUp, Wallet, Package, Store, Download, Printer, FileText, Building2,
+  TrendingUp, Wallet, Package, Store, Download, Printer, FileText,
+  Building2, MessageCircle, Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import Receipt from "@/components/Receipt";
 
 const ALL = "__all__";
+
+// Send report to a single mitra via WhatsApp. Downloads the PDF then opens wa.me.
+function sendReportToMitra(mitra, date) {
+  const phone = normalizeWaNumber(mitra.whatsapp_number);
+  if (!phone) {
+    toast.error(`Mitra "${mitra.mitra_name}" belum punya nomor WhatsApp`);
+    return false;
+  }
+  // Generate + download the PDF
+  exportMitraPDF(mitra, date, { silent: true });
+  // Open WhatsApp
+  const link = waLink(mitra.whatsapp_number, buildMitraReportMessage(mitra.mitra_name));
+  if (link) {
+    window.open(link, "_blank", "noopener,noreferrer");
+    toast.success(`PDF diunduh & WhatsApp dibuka untuk ${mitra.mitra_name}`);
+    return true;
+  }
+  return false;
+}
 
 export default function Dashboard() {
   const [data, setData] = useState(null);
@@ -26,14 +50,13 @@ export default function Dashboard() {
   const [period, setPeriod] = useState("daily");
   const [chart, setChart] = useState(null);
   const [printData, setPrintData] = useState(null);
+  const [blastOpen, setBlastOpen] = useState(false);
 
   const loadCabangs = async () => {
     try {
       const r = await api.get("/cabang");
       setCabangs(r.data);
-    } catch (_e) {
-      // ignore
-    }
+    } catch (_e) { /* ignore */ }
   };
 
   const loadDashboard = async (cabangFilter) => {
@@ -60,7 +83,6 @@ export default function Dashboard() {
   useEffect(() => { loadDashboard(selectedCabang); }, [selectedCabang]);
   useEffect(() => { loadChart(period, selectedCabang); }, [period, selectedCabang]);
 
-  // Group mitra cards by cabang for visual grouping
   const groupedCards = useMemo(() => {
     if (!data?.mitra_cards) return [];
     const map = new Map();
@@ -69,6 +91,21 @@ export default function Dashboard() {
       map.get(m.cabang_id).items.push(m);
     });
     return Array.from(map.entries()).map(([cabang_id, v]) => ({ cabang_id, ...v }));
+  }, [data]);
+
+  // Ready = has products and (has whatsapp_number)
+  const readyMitras = useMemo(() => {
+    if (!data?.mitra_cards) return [];
+    return data.mitra_cards.filter(
+      (m) => m.items.length > 0 && !!normalizeWaNumber(m.whatsapp_number)
+    );
+  }, [data]);
+
+  const notReadyMitras = useMemo(() => {
+    if (!data?.mitra_cards) return [];
+    return data.mitra_cards.filter(
+      (m) => m.items.length > 0 && !normalizeWaNumber(m.whatsapp_number)
+    );
   }, [data]);
 
   const printAll = () => {
@@ -86,8 +123,7 @@ export default function Dashboard() {
   const metrics = data?.metrics || { total_sales: 0, total_profit: 0, total_items: 0, mitra_count: 0 };
 
   return (
-     <div className="space-y-6 sm:space-y-8" data-testid="dashboard-page">
-      {/* Cabang selector */}
+    <div className="space-y-6 sm:space-y-8" data-testid="dashboard-page">
       <div className="flex items-center gap-2 sm:gap-3 flex-wrap no-print">
         <div className="flex items-center gap-2">
           <Building2 size={16} className="text-red-600" />
@@ -96,7 +132,7 @@ export default function Dashboard() {
           </span>
         </div>
         <Select value={selectedCabang} onValueChange={setSelectedCabang}>
-          <SelectTrigger className="w-60" data-testid="dashboard-cabang-select">
+          <SelectTrigger className="w-full sm:w-60" data-testid="dashboard-cabang-select">
             <SelectValue placeholder="Semua Cabang" />
           </SelectTrigger>
           <SelectContent>
@@ -121,13 +157,20 @@ export default function Dashboard() {
         <h2 className="font-heading text-xl sm:text-2xl font-semibold tracking-tight text-slate-900">
           Kartu Mitra Hari Ini
         </h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => exportDashboardPDF(data)}
             className="border-slate-300 flex-1 sm:flex-none" data-testid="export-pdf-button">
             <Download size={16} className="mr-2" /> Export PDF
           </Button>
           <Button onClick={printAll} className="bg-red-600 hover:bg-red-700 text-white flex-1 sm:flex-none" data-testid="print-receipt-button">
             <Printer size={16} className="mr-2" /> Cetak Struk
+          </Button>
+          <Button
+            onClick={() => setBlastOpen(true)}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white flex-1 sm:flex-none"
+            data-testid="blast-report-button"
+          >
+            <Send size={16} className="mr-2" /> Kirim Laporan ke Mitra
           </Button>
         </div>
       </div>
@@ -202,6 +245,80 @@ export default function Dashboard() {
           <Receipt {...printData} />
         </div>
       )}
+
+      {/* Blast dialog */}
+      <Dialog open={blastOpen} onOpenChange={setBlastOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[92vh] overflow-y-auto" data-testid="blast-modal">
+          <DialogHeader>
+            <DialogTitle className="font-heading">Kirim Laporan ke Mitra</DialogTitle>
+            <DialogDescription>
+              Klik <strong>Kirim</strong> pada masing-masing mitra untuk mengunduh PDF laporan &amp;
+              membuka WhatsApp mitra. Lampirkan PDF yang terunduh saat mengirim di WhatsApp.
+            </DialogDescription>
+          </DialogHeader>
+
+          {readyMitras.length === 0 && notReadyMitras.length === 0 ? (
+            <div className="py-8 text-center text-sm text-slate-500">
+              Belum ada mitra dengan aktivitas hari ini.
+            </div>
+          ) : (
+            <div className="space-y-2 mt-2">
+              {readyMitras.map((m) => (
+                <div
+                  key={m.mitra_id}
+                  className="flex items-center justify-between gap-3 p-3 border border-slate-200 rounded-lg hover:border-emerald-200 hover:bg-emerald-50/40 transition-colors"
+                  data-testid={`blast-row-${m.mitra_id}`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium text-slate-900 truncate">{m.mitra_name}</div>
+                    <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-2">
+                      <span>{m.total_items} item</span>
+                      <span>•</span>
+                      <span>{formatRupiah(m.total_setoran)}</span>
+                      <span>•</span>
+                      <span className="text-emerald-700">{m.whatsapp_number}</span>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+                    onClick={() => sendReportToMitra(m, data.date)}
+                    data-testid={`blast-send-${m.mitra_id}`}
+                  >
+                    <MessageCircle size={14} className="mr-1.5" /> Kirim
+                  </Button>
+                </div>
+              ))}
+              {notReadyMitras.length > 0 && (
+                <div className="pt-2">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-2">
+                    Belum ada nomor WhatsApp
+                  </div>
+                  {notReadyMitras.map((m) => (
+                    <div
+                      key={m.mitra_id}
+                      className="flex items-center justify-between gap-3 p-3 border border-dashed border-slate-200 rounded-lg opacity-70"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-slate-700 truncate">{m.mitra_name}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          Isi nomor WhatsApp di menu <strong>Mitra</strong>.
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBlastOpen(false)} data-testid="blast-close">
+              Tutup
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -229,32 +346,35 @@ function MetricCard({ icon: Icon, label, value, testId, accent }) {
 }
 
 function MitraCard({ data, date }) {
+  const soldItems = data.items.filter((it) => it.jumlah_terjual > 0);
+  const hasSales = soldItems.length > 0;
+  const canSendWa = !!normalizeWaNumber(data.whatsapp_number);
   return (
     <Card className="border-slate-200 hover:shadow-sm transition-shadow flex flex-col" data-testid={`mitra-card-${data.mitra_id}`}>
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="font-heading text-lg font-semibold tracking-tight text-slate-900">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="font-heading text-lg font-semibold tracking-tight text-slate-900 truncate">
             {data.mitra_name}
           </CardTitle>
-          <span className="text-xs font-medium px-2 py-1 bg-red-50 text-red-700 rounded-full">
+          <span className="text-xs font-medium px-2 py-1 bg-red-50 text-red-700 rounded-full shrink-0">
             {data.total_items} terjual
           </span>
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col space-y-3">
-        {data.items.length === 0 ? (
+        {!hasSales ? (
           <p className="text-sm text-slate-500 italic">Belum ada penjualan hari ini.</p>
         ) : (
           <ul className="divide-y divide-slate-100">
-            {data.items.map((it, idx) => (
+            {soldItems.map((it, idx) => (
               <li key={idx} className="py-2.5 flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-medium text-slate-800">{it.menu}</div>
+                <div className="min-w-0 pr-2">
+                  <div className="text-sm font-medium text-slate-800 truncate">{it.menu}</div>
                   <div className="text-xs text-slate-500 mt-0.5">
                     {it.jumlah_terjual} × {formatRupiah(it.harga_mitra)}
                   </div>
                 </div>
-                <div className="text-right">
+                <div className="text-right shrink-0">
                   <div className="text-sm font-semibold text-slate-900">{formatRupiah(it.setoran_mitra)}</div>
                   <div className="text-xs text-emerald-600 mt-0.5">+{formatRupiah(it.profit)}</div>
                 </div>
@@ -276,13 +396,25 @@ function MitraCard({ data, date }) {
             <span className="font-medium">{formatRupiah(data.total_profit)}</span>
           </div>
         </div>
-        <Button
-          variant="outline" size="sm"
-          className="w-full mt-2 border-slate-300 text-slate-700 hover:text-red-700 hover:border-red-200 hover:bg-red-50"
-          onClick={() => exportMitraPDF(data, date)}
-          disabled={data.items.length === 0}
-          data-testid={`export-mitra-pdf-${data.mitra_id}`}
-        ><FileText size={14} className="mr-2" /> Export PDF Mitra</Button>
+        <div className="flex gap-2 mt-2">
+          <Button
+            variant="outline" size="sm"
+            className="flex-1 border-slate-300 text-slate-700 hover:text-red-700 hover:border-red-200 hover:bg-red-50"
+            onClick={() => exportMitraPDF(data, date)}
+            disabled={data.items.length === 0}
+            data-testid={`export-mitra-pdf-${data.mitra_id}`}
+          ><FileText size={14} className="mr-2" /> Export PDF</Button>
+          <Button
+            size="sm"
+            className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white disabled:bg-slate-200 disabled:text-slate-400"
+            onClick={() => sendReportToMitra(data, date)}
+            disabled={!canSendWa || data.items.length === 0}
+            title={canSendWa ? "Kirim laporan via WhatsApp" : "Belum ada nomor WhatsApp"}
+            data-testid={`send-wa-${data.mitra_id}`}
+          >
+            <MessageCircle size={14} />
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
