@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration-6: verified bulk_save endpoint + no-PDF WA flow + Products page mitra-grouping/search/bulk dialog. Backend: 44/44 pytest passing (added 7 new tests in test_bulk_save.py for bulk_save: create, update-preserves-last_reset_date, empty-menu skip, mixed create/update, 404 on bad mitra, 401 auth guard, list-after-bulk-save). Frontend: send-wa button confirmed opens ONLY wa.me URL (no PDF download); WA message contains 3 required summary lines with exact wording. Products page grouped by mitra (12 groups), search filters by menu/mitra/cabang, clear button works, bulk dialog with add/remove row and pre-filled existing products verified. Both edit-mitra-products-{id} and edit-product-{id} open bulk dialog with rows pre-filled.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Blast modal (Dashboard.jsx L252-254)", "issues": ["DialogDescription still says 'Klik Kirim pada masing-masing mitra untuk mengunduh PDF laporan & membuka WhatsApp mitra. Lampirkan PDF yang terunduh saat mengirim di WhatsApp.' — stale copy since new flow no longer downloads PDF. Update text to reflect WA-only send."]},
+      {"screen": "Dashboard chart (carry-over)", "issues": ["Recharts still logs 'width(-1) and height(-1)' warnings on initial render (cosmetic)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_bulk_save.py",
+    "/app/backend/tests/test_umkm_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Update blast modal DialogDescription in /app/frontend/src/pages/Dashboard.jsx (L252) to remove the 'mengunduh PDF laporan & Lampirkan PDF yang terunduh' text — the new send flow only opens wa.me with a text summary."
+  ],
+  "critical_code_review_comments": [
+    "POST /api/products/bulk_save correctly separates create vs update by presence of item.id; last_reset_date preserved on updates (only $set of denorm+editable fields) and set to today_str() on create — verified via test_bulk_save_update_preserves_last_reset_date. ✓",
+    "Empty/whitespace menu items filtered on backend AND frontend (Products.jsx L164 filter r.menu.length>0). ✓",
+    "bulk_save returns {ok, count, products} where products is the full re-queried list for the mitra sorted by menu — good for UI refresh, though frontend still calls load() after which is a duplicate GET. Minor optimization opportunity, not a bug.",
+    "buildMitraReportMessage(mitraCard) computes totalTidakTerjual = sum(max(stok-jumlah_terjual, 0)) across items — correct semantics for '# not sold today'. Format matches spec exactly. ✓",
+    "sendReportToMitra no longer calls exportMitraPDF — only window.open(waLink). Verified via monkey-patched window.open: 1 URL captured (wa.me), 0 blob URLs, 0 download events. ✓",
+    "Products.jsx grouping by mitra_id (Map with mitra_id key) sorts by cabang_name then mitra_name — matches spec of showing 'mitra_name · cabang_name · (n produk)'. ✓",
+    "Search filter is case-insensitive across menu/mitra_name/cabang_name fields. ✓",
+    "Bulk dialog: row key uses random _key for new rows and p.id for existing; correctly resets rows when cabang/mitra changes; save uses api.post('/products/bulk_save', ...) with cleaned items. ✓",
+    "Backend bulk_save loop is not wrapped in a MongoDB session/transaction — a mid-loop failure could leave partial writes. Acceptable for MVP but flag for future hardening.",
+    "(carry-over) CORS_ORIGINS='*' with allow_credentials=True is spec-invalid — set explicit origins for prod."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_bulk_save.py (new file, 7 tests all passing)"
+  ],
+  "success_rate": {"backend": "100% (44/44 pytest)", "frontend": "100% — WA send opens only wa.me, no PDF; Products search + mitra grouping + bulk dialog all working; add-row/remove-row/edit-mitra-products/edit-product all wire into single bulk dialog"},
+  "test_credentials": "admin@sarapan.id / admin123",
+  "seed_data_creation": "TEST_-prefixed data created and cleaned up by fixtures. Existing Adam Test / Bu Ade Juleha seed data untouched.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: pytest /app/backend/tests/ -v (44 tests total: 37 in test_umkm_api.py + 7 in test_bulk_save.py). Products route is /products (not /produk). Key new selectors: [data-testid=search-product-input], [data-testid=search-product-clear], [data-testid^=product-mitra-group-], [data-testid^=edit-mitra-products-], [data-testid^=product-bulk-row-], [data-testid=bulk-menu-{idx}] (and bulk-jumlah/bulk-harga-mitra/bulk-harga-jual/bulk-remove), [data-testid=bulk-add-row], [data-testid=product-save-button]. To verify no-PDF WA flow: monkey-patch window.open to capture URLs, click any enabled [data-testid^=send-wa-] button, assert exactly one wa.me URL and no blob: URL and no download event."
+}

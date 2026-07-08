@@ -24,20 +24,19 @@ import Receipt from "@/components/Receipt";
 
 const ALL = "__all__";
 
-// Send report to a single mitra via WhatsApp. Downloads the PDF then opens wa.me.
-function sendReportToMitra(mitra, date) {
+// Send report text to a single mitra via WhatsApp (no PDF attachment).
+function sendReportToMitra(mitra) {
   const phone = normalizeWaNumber(mitra.whatsapp_number);
   if (!phone) {
     toast.error(`Mitra "${mitra.mitra_name}" belum punya nomor WhatsApp`);
     return false;
   }
-  // Generate + download the PDF
-  exportMitraPDF(mitra, date, { silent: true });
+
   // Open WhatsApp
-  const link = waLink(mitra.whatsapp_number, buildMitraReportMessage(mitra.mitra_name));
+  const link = waLink(mitra.whatsapp_number, buildMitraReportMessage(mitra));
   if (link) {
     window.open(link, "_blank", "noopener,noreferrer");
-    toast.success(`PDF diunduh & WhatsApp dibuka untuk ${mitra.mitra_name}`);
+    toast.success(`WhatsApp dibuka untuk ${mitra.mitra_name}`);
     return true;
   }
   return false;
@@ -282,7 +281,7 @@ export default function Dashboard() {
                   <Button
                     size="sm"
                     className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
-                    onClick={() => sendReportToMitra(m, data.date)}
+                    onClick={() => sendReportToMitra(m)}
                     data-testid={`blast-send-${m.mitra_id}`}
                   >
                     <MessageCircle size={14} className="mr-1.5" /> Kirim
@@ -407,7 +406,7 @@ function MitraCard({ data, date }) {
           <Button
             size="sm"
             className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white disabled:bg-slate-200 disabled:text-slate-400"
-            onClick={() => sendReportToMitra(data, date)}
+            onClick={() => sendReportToMitra(data)}
             disabled={!canSendWa || data.items.length === 0}
             title={canSendWa ? "Kirim laporan via WhatsApp" : "Belum ada nomor WhatsApp"}
             data-testid={`send-wa-${data.mitra_id}`}
