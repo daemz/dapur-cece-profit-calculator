@@ -42,10 +42,10 @@ export function buildMitraReportMessage(mitraCard) {
   const totalDibayar = mitraCard?.total_setoran ?? 0;
 
   return [
-    `Halo kak ${name}, berikut rincian hasil penjualan hari ini ya!`,
-    "",
-    `Total Produk Terjual: ${totalTerjual}`,
-    `Total Produk Tidak Terjual: ${totalTidakTerjual}`,
+    `Halo kak ${name}, berikut rincian hasil penjualan hari ini ya!\n`,
+    "\n",
+    `Total Produk Terjual: ${totalTerjual}\n`,
+    `Total Produk Tidak Terjual: ${totalTidakTerjual}\n`,
     `Total Dibayar ke Mitra: ${formatRupiah(totalDibayar)}`,
   ].join("");
 }
