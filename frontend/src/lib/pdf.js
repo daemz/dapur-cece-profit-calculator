@@ -58,10 +58,13 @@ export function exportDashboardPDF(data) {
   const rows = [];
   data.mitra_cards.forEach((m) => {
     m.items.forEach((it) => {
+      const notSold = Math.max((it.stok ?? 0) - (it.jumlah_terjual ?? 0), 0);
+
       rows.push([
         m.mitra_name,
         it.menu,
         String(it.jumlah_terjual),
+        String(notSold),
         formatRupiah(it.harga_jual),
         formatRupiah(it.total_pendapatan),
         formatRupiah(it.profit),
@@ -71,8 +74,8 @@ export function exportDashboardPDF(data) {
 
   autoTable(doc, {
     startY: 52,
-    head: [["Mitra", "Menu", "Qty", "Harga Jual", "Pendapatan", "Profit"]],
-    body: rows.length ? rows : [["-", "-", "-", "-", "-", "-"]],
+    head: [["Mitra", "Menu", "Terjual", "Tidak Terjual", "Harga Jual", "Pendapatan", "Profit"]],
+    body: rows.length ? rows : [["-", "-", "-", "-", "-", "-", "-"]],
     styles: { fontSize: 9, halign: "left" },
     headStyles: { fillColor: [220, 38, 38], halign: "left", textColor: [255, 255, 255] },
     bodyStyles: { halign: "left" },
@@ -82,6 +85,7 @@ export function exportDashboardPDF(data) {
       2: { halign: "left" },
       3: { halign: "left" },
       4: { halign: "left" },
+      5: { halign: "left" },
       5: { halign: "left" },
     },
   });
@@ -106,17 +110,21 @@ export function buildMitraPDF(mitraCard, date) {
   doc.setFontSize(10);
   doc.text(`Tanggal: ${date}`, 14, 32);
 
-  const rows = mitraCard.items.map((it) => [
-    it.menu,
+  const rows = mitraCard.items.map((it) => {
+    const notSold = Math.max((it.stok ?? 0) - (it.jumlah_terjual ?? 0), 0);
+
+    return [
     formatRupiah(it.harga_mitra),
     String(it.jumlah_terjual),
+    String(notSold),
     formatRupiah(it.harga_mitra * it.jumlah_terjual),
-  ]);
+    ];
+  });
 
   autoTable(doc, {
     startY: 40,
-    head: [["Produk", "Harga Produk", "Jumlah Terjual", "Total"]],
-    body: rows.length ? rows : [["-", "-", "-", "-"]],
+    head: [["Produk", "Harga Produk", "Jumlah Terjual", "Jumlah Tidak Terjual", "Total"]],
+    body: rows.length ? rows : [["-", "-", "-", "-", "-"]],
     styles: { fontSize: 10, halign: "left" },
     headStyles: { fillColor: [220, 38, 38], halign: "left", textColor: [255, 255, 255] },
     bodyStyles: { halign: "left" },
@@ -124,7 +132,8 @@ export function buildMitraPDF(mitraCard, date) {
       0: { halign: "left" },
       1: { halign: "left" },
       2: { halign: "left" },
-      3: { halign: "left", fontStyle: "bold" },
+      3: { halign: "left" },
+      4: { halign: "left", fontStyle: "bold" },
     },
     foot: [
       [

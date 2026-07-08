@@ -141,6 +141,18 @@ class ProductIn(BaseModel):
     harga_mitra: float = Field(ge=0)
     harga_jual: float = Field(ge=0)
 
+class BulkProductItem(BaseModel):
+    id: Optional[str] = None
+    menu: str
+    jumlah: int = Field(ge=0)
+    harga_mitra: float = Field(ge=0)
+    harga_jual: float = Field(ge=0)
+
+
+class BulkProductIn(BaseModel):
+    mitra_id: str
+    items: List[BulkProductItem]
+
 
 class Product(BaseModel):
     id: str
@@ -447,6 +459,55 @@ async def update_product(product_id: str, payload: ProductIn, user=Depends(get_c
         raise HTTPException(status_code=404, detail="Produk tidak ditemukan")
     result.pop("_id", None)
     return Product(**result)
+
+@api.post("/products/bulk_save")
+async def bulk_save_products(payload: BulkProductIn, user=Depends(get_current_user)):
+    mitra = await db.mitra.find_one({"id": payload.mitra_id})
+    if not mitra:
+        raise HTTPException(status_code=404, detail="Mitra tidak ditemukan")
+    today = today_str()
+    saved_ids = []
+    for it in payload.items:
+        if not it.menu.strip():
+            continue
+        if it.id:
+            # Update existing
+            update = {
+                "mitra_id": mitra["id"],
+                "mitra_name": mitra["name"],
+                "cabang_id": mitra["cabang_id"],
+                "cabang_name": mitra["cabang_name"],
+                "menu": it.menu,
+                "jumlah": it.jumlah,
+                "harga_mitra": it.harga_mitra,
+                "harga_jual": it.harga_jual,
+            }
+            result = await db.products.update_one({"id": it.id}, {"$set": update})
+            if result.matched_count:
+                saved_ids.append(it.id)
+        else:
+            # Create new
+            new_id = str(uuid.uuid4())
+            doc = {
+                "id": new_id,
+                "mitra_id": mitra["id"],
+                "mitra_name": mitra["name"],
+                "cabang_id": mitra["cabang_id"],
+                "cabang_name": mitra["cabang_name"],
+                "menu": it.menu,
+                "jumlah": it.jumlah,
+                "harga_mitra": it.harga_mitra,
+                "harga_jual": it.harga_jual,
+                "last_reset_date": today,
+                "created_at": now_iso(),
+            }
+            await db.products.insert_one(doc)
+            saved_ids.append(new_id)
+    # Also propagate any changes to transaction denorm fields (rare edit case)
+    products_after = await db.products.find(
+        {"mitra_id": payload.mitra_id}, {"_id": 0}
+    ).sort("menu", 1).to_list(1000)
+    return {"ok": True, "count": len(saved_ids), "products": products_after}
 
 
 @api.delete("/products/{product_id}")
